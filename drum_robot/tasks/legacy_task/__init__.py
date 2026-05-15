@@ -1,4 +1,4 @@
-# source/extensions/drum_robot/drum_robot/tasks/legacy_task/__init__.py
+# drum_robot/tasks/legacy_task/__init__.py
 
 from __future__ import annotations
 

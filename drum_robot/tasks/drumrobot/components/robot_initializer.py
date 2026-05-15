@@ -2,7 +2,7 @@
 """
 로봇 초기 위치 초기화 클래스 
 
-path: source/extensions/drum_robot/drum_robot/tasks/drumrobot/components/robot_initializer.py
+path: drum_robot/tasks/drumrobot/components/robot_initializer.py
 """
 
 from __future__ import annotations

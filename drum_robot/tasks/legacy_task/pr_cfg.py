@@ -1,4 +1,4 @@
-# source/extensions/drum_robot/drum_robot/tasks/legacy_task/pr_cfg.py
+# drum_robot/tasks/legacy_task/pr_cfg.py
 
 from __future__ import annotations
 

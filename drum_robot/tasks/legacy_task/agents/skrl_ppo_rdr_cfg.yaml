@@ -1,6 +1,6 @@
 
 # skrl 설정
-# path: source/extensions/drum_robot/drum_robot/tasks/drumrobot/agents/skrl_ppo_cfg.yaml
+# path: drum_robot/tasks/drumrobot/agents/skrl_ppo_cfg.yaml
 
 seed: 42
 

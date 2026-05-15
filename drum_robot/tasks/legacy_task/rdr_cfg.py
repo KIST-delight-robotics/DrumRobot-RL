@@ -2,7 +2,7 @@
 """
 설정 클래스
 
-path: source/extensions/drum_robot/drum_robot/tasks/drumrobot/drumrobot_cfg.py
+path: drum_robot/tasks/drumrobot/drumrobot_cfg.py
 """ 
 
 from __future__ import annotations

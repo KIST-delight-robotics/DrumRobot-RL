@@ -5,7 +5,7 @@
 # - (옵션) 지정한 joint들의 physics:jointState:angular:position(q0)도 세팅한다.
 #
 # 실행 예시:
-# ./isaaclab.sh -p source/extensions/drum_robot/drum_robot/tools/patch_limits_deg_to_rad.py \
+# ./isaaclab.sh -p source/extensions/drum_robot/drum_robot/scripts/patch_limits_deg_to_rad.py \
 #   --in  /.../drum_robot.usd \
 #   --out /.../drum_robot_patched.usd
 #

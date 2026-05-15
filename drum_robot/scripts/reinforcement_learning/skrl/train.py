@@ -2,7 +2,7 @@
 """
 Script to train RL agent with skrl.
 
-path: source/extensions/drum_robot/drum_robot/scripts/reinforcement_learning/skrl/train.py
+path: drum_robot/scripts/reinforcement_learning/skrl/train.py
 """
 
 """Launch Isaac Sim Simulator first."""

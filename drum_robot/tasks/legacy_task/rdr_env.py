@@ -2,7 +2,7 @@
 """
 환경 클래스
 
-path: source/extensions/drum_robot/drum_robot/tasks/drumrobot/drumrobot_env.py
+path: drum_robot/tasks/drumrobot/drumrobot_env.py
 """
 
 from __future__ import annotations

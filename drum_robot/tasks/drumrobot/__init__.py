@@ -1,6 +1,6 @@
 
 """
-path: source/extensions/drum_robot/drum_robot/tasks/drumrobot/__init__.py
+path: drum_robot/tasks/drumrobot/__init__.py
 """
 
 from __future__ import annotations

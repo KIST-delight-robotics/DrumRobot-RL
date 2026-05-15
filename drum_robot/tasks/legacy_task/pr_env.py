@@ -1,4 +1,4 @@
-# source/extensions/drum_robot/drum_robot/tasks/legacy_task/pr_env.py
+# drum_robot/tasks/legacy_task/pr_env.py
 
 # 실행 순서
 # _pre_physics_step -> _apply_action (decimation) -> _get_dones -> _get_rewards -> _get_observations

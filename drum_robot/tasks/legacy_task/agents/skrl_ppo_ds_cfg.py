@@ -1,4 +1,4 @@
-# source/extensions/drum_robot/drum_robot/tasks/legacy_task/agents/skrl_ppo_ds_cfg.py
+# drum_robot/tasks/legacy_task/agents/skrl_ppo_ds_cfg.py
 
 def get_default_ppo_cfg():
     return {
