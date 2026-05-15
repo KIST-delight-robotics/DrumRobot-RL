@@ -1,2 +1,9 @@
+# Python cache
 __pycache__/
-*.pyc
+*.py[cod]
+
+# Logs
+logs/
+
+# Outputs
+outputs/
