@@ -22,7 +22,8 @@ gym.register(
 """
 체크포인트 불러와서 학습 실행 명령어
 
-./isaaclab.sh -p source/extensions/drum_robot/drum_robot/scripts/reinforcement_learning/skrl/train.py \
+../../../isaaclab.sh \
+  -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
   --task=DrumRobot-drum_score-Direct-v0 \
   --num_envs=4096 \
   --headless \
@@ -31,8 +32,9 @@ gym.register(
 
 테스트 명령어
 
-./isaaclab.sh -p source/extensions/drum_robot/drum_robot/scripts/reinforcement_learning/skrl/play.py \
+../../../isaaclab.sh \
+  -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-drum_score-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/logs/skrl/drum_robot/0513_4/checkpoints/agent_100000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/logs/skrl/drum_robot/2026-05-14_17-47-44_ppo_torch_drum_score/checkpoints/agent_5000000.pt"
 """
