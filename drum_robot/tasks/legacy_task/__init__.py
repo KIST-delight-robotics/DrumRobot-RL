@@ -24,7 +24,7 @@ gym.register(
   -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-point_reaching-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/logs/skrl/drum_robot/ppo_pr/checkpoints/agent_800000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_pr/checkpoints/agent_800000.pt"
 """
 
 # Drum Reaching
@@ -45,7 +45,7 @@ gym.register(
   -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-drum_reaching-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/logs/skrl/drum_robot/ppo_dr/checkpoints/agent_700000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_dr/checkpoints/agent_700000.pt"
 """
 
 # Drum Striking
@@ -66,7 +66,7 @@ gym.register(
   -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-drum_striking-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/logs/skrl/drum_robot/ppo_ds/checkpoints/agent_100000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_ds/checkpoints/agent_100000.pt"
 """
 
 # Rhythmic Drum Reaching
@@ -87,7 +87,7 @@ gym.register(
   -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-rhythmic_drum_reaching-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/logs/skrl/drum_robot/ppo_rdr/checkpoints/agent_1000000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_rdr/checkpoints/agent_1000000.pt"
 """
 
 # Random Rhythmic Drum Reaching
@@ -109,5 +109,5 @@ gym.register(
   -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-random_rhythmic_drum_reaching-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/logs/skrl/drum_robot/ppo_rrdr/checkpoints/agent_5000000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_rrdr/checkpoints/agent_5000000.pt"
 """
