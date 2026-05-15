@@ -1,0 +1,23 @@
+==== Joint Names ====
+[00] waist_joint                +
+[01] head                       +
+[02] left_shoulder_1            -
+[03] right_shoulder_1           -
+[04] head_2                     +
+[05] left_shoulder_2            -
+[06] right_shoulder_2           +
+[07] left_elbow                 -
+[08] right_elbow                +
+[09] left_wrist                 +
+[10] right_wrist                -
+
+
+        "waist_joint": (-90*math.pi/180, 90*math.pi/180),
+        "left_shoulder_1": (30*math.pi/180, 180*math.pi/180),
+        "left_shoulder_2": (-10*math.pi/180, 0*math.pi/180),
+        "left_elbow": (0*math.pi/180, 140*math.pi/180),
+        "right_shoulder_1": (0*math.pi/180, 150*math.pi/180),
+        "right_shoulder_2": (-10*math.pi/180, 0*math.pi/180),
+        "right_elbow": (0*math.pi/180, 140*math.pi/180),
+        "left_wrist": (-90*math.pi/180, 90*math.pi/180),
+        "right_wrist": (-90*math.pi/180, 90*math.pi/180),

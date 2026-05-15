@@ -1,0 +1,102 @@
+# source/extensions/drum_robot/drum_robot/tasks/test_sac/agents/skrl_sac_cfg.yaml
+
+seed: 42
+
+
+# Models are instantiated using skrl's model instantiator utility
+# https://skrl.readthedocs.io/en/latest/api/utils/model_instantiators.html
+models:
+  separate: True
+  policy:  # see gaussian_model parameters
+    class: GaussianMixin
+    clip_actions: True
+    network:
+      - name: net
+        input: OBSERVATIONS
+        layers: [400, 200, 100]
+        activations: elu
+    output: ACTIONS
+  critic_1:  # see deterministic_model parameters
+    class: DeterministicMixin
+    clip_actions: False
+    network:
+      - name: net
+        input: concatenate([OBSERVATIONS, ACTIONS])
+        layers: [400, 200, 100]
+        activations: elu
+    output: ONE
+  critic_2:  # see deterministic_model parameters
+    class: DeterministicMixin
+    clip_actions: False
+    network:
+      - name: net
+        input: concatenate([OBSERVATIONS, ACTIONS])
+        layers: [400, 200, 100]
+        activations: elu
+    output: ONE
+  target_critic_1:  # see deterministic_model parameters
+    class: DeterministicMixin
+    clip_actions: False
+    network:
+      - name: net
+        input: concatenate([OBSERVATIONS, ACTIONS])
+        layers: [400, 200, 100]
+        activations: elu
+    output: ONE
+  target_critic_2:  # see deterministic_model parameters
+    class: DeterministicMixin
+    clip_actions: False
+    network:
+      - name: net
+        input: concatenate([OBSERVATIONS, ACTIONS])
+        layers: [400, 200, 100]
+        activations: elu
+    output: ONE
+
+
+# Rollout memory
+# https://skrl.readthedocs.io/en/latest/api/memories/random.html
+memory:
+  class: RandomMemory
+  memory_size: -1  # automatically determined (same as agent:rollouts)
+
+
+# PPO agent configuration (field names are from PPO_DEFAULT_CONFIG)
+# https://skrl.readthedocs.io/en/latest/api/agents/ppo.html
+agent:
+  class: SAC
+  rollouts: 16
+  gradient_steps: 1
+  batch_size: 64
+  discount_factor: 0.99
+  polyak: 0.005
+  actor_learning_rate: 5.0e-4
+  critic_learning_rate: 5.0e-4
+  learning_rate_scheduler: null
+  learning_rate_scheduler_kwargs: null
+  state_preprocessor: RunningStandardScaler
+  state_preprocessor_kwargs: null
+  random_timesteps: 80
+  learning_starts: 80
+  grad_norm_clip: 0
+  learn_entropy: True
+  entropy_learning_rate: 0.001
+  initial_entropy_value: 0.2
+  target_entropy: null
+  rewards_shaper: null
+  rewards_shaper: null
+  mixed_precision: False
+  # logging and checkpoint
+  experiment:
+    directory: "drum_robot"
+    experiment_name: "test_sac"
+    write_interval: auto
+    checkpoint_interval: auto
+
+
+# Sequential trainer
+# https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
+trainer:
+  class: SequentialTrainer
+  timesteps: 1234567
+  environment_info: log

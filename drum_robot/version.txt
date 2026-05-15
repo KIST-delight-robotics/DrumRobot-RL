@@ -1,0 +1,11 @@
+IsaacLab: 2.3.0 (main, 커밋 cbf51abb5e)
+
+Isaac Sim (pip): 4.5.0.0
+
+isaacsim = 4.5.0.0
+
+isaacsim-core = 4.5.0.0
+
+isaacsim-rl = 4.5.0.0
+
+Python (conda env): 3.10 (env_isaaclab)

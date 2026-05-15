@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: drum_robot
+Version: 0.0.1
+Summary: Drum robot IsaacLab extension (python package wrapper)
+Requires-Python: >=3.10

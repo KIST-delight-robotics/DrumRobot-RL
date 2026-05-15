@@ -1,0 +1,15 @@
+[package]
+title = "Drum Robot"
+description = "IsaacLab tasks and utilities for drum_robot"
+version = "0.0.1"
+category = "IsaacLab"
+readme = "README.md"
+
+[dependencies]
+"omni.isaac.core" = {}
+"isaaclab" = {}
+"isaaclab_tasks" = {}
+"isaaclab_rl" = {}
+
+[[python.module]]
+name = "drum_robot"
