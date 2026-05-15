@@ -14,7 +14,7 @@ from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
 
 from .drumrobot_cfg import DrumRobotEnvCfg
 from drum_robot.utils.logger import EnvLogger, LoggerCfg
-from drum_robot.utils.drum_robot_rds_generator import RdsGeneratorCfg, RdsGenerator
+from drum_robot.tasks.legacy_task.components.drum_robot_rds_generator import RdsGeneratorCfg, RdsGenerator
 
 import numpy as np
 import gymnasium as gym
@@ -328,7 +328,7 @@ class DrumRobotEnv(DirectRLEnv):
             self._translate_drum(self.inst_pos)
 
         # RDS 리셋
-        robotic_drum_score = self.rds_generator.reset_target_score(env_ids)
+        robotic_drum_score = self.rds_generator.reset_target(env_ids)
         self.rds[env_ids] = robotic_drum_score
         self.rds_visit[env_ids] = False
 

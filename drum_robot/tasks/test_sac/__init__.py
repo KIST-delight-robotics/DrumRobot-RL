@@ -18,10 +18,11 @@ gym.register(
 )
 
 """
-./isaaclab.sh -p source/extensions/drum_robot/drum_robot/scripts/reinforcement_learning/skrl/train.py \
+../../../isaaclab.sh \
+  -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
   --task=DrumRobot-test_sac-Direct-v0 \
   --num_envs=4096 \
   --algorithm=SAC \
   --headless \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/logs/skrl/drum_robot/ppo_torch_drum_striking_timed_v3_3/checkpoints/agent_100000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/folder_name/checkpoints/agent_100000.pt"
 """
