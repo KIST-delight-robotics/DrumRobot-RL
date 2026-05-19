@@ -53,7 +53,7 @@ class DrumRobotEnv(DirectRLEnv):
         self._init_obs_norm_stats()  # 관측값 정규화를 위한 변수 초기화
 
         # 로그
-        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=200000, sample_env_id=0))
+        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=100000, sample_env_id=0))
         
         # RDS initializer
         self.rds_initializer = RdsInitializer(
@@ -228,6 +228,20 @@ class DrumRobotEnv(DirectRLEnv):
         # time_out = self.episode_length_buf >= self.max_episode_length - 1
         died = torch.zeros((self.num_envs,), device=self.device, dtype=torch.bool)
 
+        if time_out[0]:
+            eps = 1e-6
+            success_ratio = self.n_success / (self.n_hit + eps)
+            self.w_inst_success = 1.0 / (success_ratio + eps)
+
+            # 평균 1로 정규화
+            self.w_inst_success = (self.w_inst_success / self.w_inst_success.mean())
+
+            self.n_success[:] = 0
+            self.n_hit[:] = 0
+        else:
+            self.n_success = self.n_success + success.float().sum(dim=0)
+            self.n_hit = self.n_hit + success.float().sum(dim=0) + missed_target.float().sum(dim=0)
+
         # 시각화 (팁 표시, 드럼 색상 변경)
         self.visualizer.step(self.tip_pos, self.next_hits, hit_per_arm)
 
@@ -265,6 +279,8 @@ class DrumRobotEnv(DirectRLEnv):
             robot_pos=robot_pos,
             joint_low=self.joint_low,
             joint_high=self.joint_high,
+
+            w_inst_success=self.w_inst_success,
 
             k_accuracy=self.cfg.k_accuracy,
             k_time_to_hit=self.cfg.k_time_to_hit,
@@ -314,6 +330,13 @@ class DrumRobotEnv(DirectRLEnv):
             w_under_drum=self.cfg.w_under_drum,
         )
 
+        num_hit_inst = self.success.float() + self.missed_target.float()
+
+        num_hit = num_hit_inst.float().sum(dim=-1)
+        num_success = self.success.float().sum(dim=-1)
+        num_wrong = self.wrong_hit.float().sum(dim=-1)
+        num_missed = self.missed_target.float().sum(dim=-1)
+
         # 로그 출력
         terms = {
             "reward": reward,
@@ -329,13 +352,10 @@ class DrumRobotEnv(DirectRLEnv):
         }
         self.logger.add(terms)
 
-        num_hit = success_reward + missed_cost
-        num_hit_inst = self.success.float() + self.missed_target.float()
-        
         p_terms = {
-            "success_rate": torch.stack([success_reward, num_hit], dim=-1),
-            "wrong_rate": torch.stack([wrong_cost, num_hit], dim=-1),
-            "miss_rate": torch.stack([missed_cost, num_hit], dim=-1),
+            "success_rate": torch.stack([num_success, num_hit], dim=-1),
+            "wrong_rate": torch.stack([num_wrong, num_hit], dim=-1),
+            "miss_rate": torch.stack([num_missed, num_hit], dim=-1),
 
             "snare_success_rate": torch.stack([self.success[:, 0], num_hit_inst[:, 0]], dim=-1),
             "snare_wrong_rate": torch.stack([self.wrong_hit[:, 0], num_hit_inst[:, 0]], dim=-1),
@@ -561,6 +581,11 @@ class DrumRobotEnv(DirectRLEnv):
 
         # step
         self.steps = torch.zeros((N,), device=self.device, dtype=torch.int64)
+
+        # 악기별 보상 가중치
+        self.w_inst_success = torch.ones((1, M), device=self.device)
+        self.n_success = torch.zeros((1, M), device=self.device)
+        self.n_hit = torch.zeros((1, M), device=self.device)
 
     def _init_obs_norm_stats(self):
         # joint
@@ -841,15 +866,26 @@ class DrumRobotEnv(DirectRLEnv):
         return offsets
 
     def _check_rearm(self, hit_armed, hit_per_arm, contact_mask, diff_z):
-        rearm_mask = (~contact_mask) & (diff_z > self.cfg.rearm_height)
+        """
+        준비
 
+        Args:
+            hit_armed:  (N, 2, M)   # 이전 준비 상태
+            contact_mask: (N, 2, M) # 접촉 여부
+            diff_z: (N, 2, M)       # z 거리
+
+        Returns:
+            next_hit_armed: (N, 2, M)
+        """
         next_hit_armed = hit_armed.clone()
 
-        # hit 나면 disarm
-        next_hit_armed[hit_per_arm] = False
-
         # 충분히 벗어나고 올라가면 rearm
+        rearm_mask = diff_z > self.cfg.rearm_height
         next_hit_armed[rearm_mask] = True
+
+        # 접촉 중이면 disarm
+        contact_expanded = contact_mask.any(dim=2, keepdim=True)  # (N,2,1)
+        next_hit_armed = next_hit_armed.masked_fill(contact_expanded, False)
 
         return next_hit_armed
 
@@ -1030,6 +1066,8 @@ def compute_reward_terms(
     joint_low: torch.Tensor,        # (1, 9) [rad]
     joint_high: torch.Tensor,       # (1, 9) [rad]
 
+    w_inst_success: torch.Tensor,   # (1, M)
+
     k_accuracy: float,
     k_time_to_hit: float,
     limit_margin: float,
@@ -1044,7 +1082,10 @@ def compute_reward_terms(
     # -------------------------------------------------
     # goal terms
     # -------------------------------------------------
-    success_reward = success.float().sum(dim=-1)        # (N,)
+    success_reward = (
+        success.float() * w_inst_success           # (N, M)
+    ).sum(dim=-1)                                  # (N,)
+    # success_reward = success.float().sum(dim=-1)        # (N,)
     wrong_cost = wrong_hit.float().sum(dim=-1)        # (N,)
     missed_cost = missed_target.float().sum(dim=-1)   # (N,)
 

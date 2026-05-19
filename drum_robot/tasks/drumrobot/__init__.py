@@ -27,7 +27,7 @@ gym.register(
   --task=DrumRobot-drum_score-Direct-v0 \
   --num_envs=4096 \
   --headless \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/0513_4/checkpoints/agent_100000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-18_14-54-56_ppo_torch_drum_score/checkpoints/agent_1000000.pt"
 
 
 테스트 명령어
@@ -36,5 +36,5 @@ gym.register(
   -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-drum_score-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-14_17-47-44_ppo_torch_drum_score/checkpoints/agent_5000000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-15_18-11-06_ppo_torch_drum_score/checkpoints/agent_1000000.pt"
 """

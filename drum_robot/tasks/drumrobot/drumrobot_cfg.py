@@ -136,10 +136,10 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     num_hits: int = 3      # 최대 관측 타격 개수
 
     # 타격 판정
-    drum_xy_radius = 0.10      # 0.15 → 0.13
-    drum_z_range = 0.05        # 0.10 → 0.07
-    min_impact_velocity = 0.3  # 0.1 → 0.2
-    rearm_height = 0.20        # 0.15 → 0.18
+    drum_xy_radius = 0.13      # 0.15 → 0.13
+    drum_z_range = 0.07        # 0.10 → 0.07
+    min_impact_velocity = 0.2  # 0.1 → 0.2
+    rearm_height = 0.18        # 0.15 → 0.18
     hit_window_step = 10       # 일단 유지
 
     """ 보상 설정 """
@@ -157,24 +157,24 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     drum_z_margin = 0.05
 
     # 가중치
-    w_success = 2.0
-    w_wrong = 1.0
-    w_miss = 1.0
-    w_time_accuracy = 2.0
+    w_success = 5.0
+    w_wrong = 1.5
+    w_miss = 2.0
+    w_time_accuracy = 5.0
 
     w_progress = 4.0
     w_proximity = 1.5
 
-    w_upward = 0.30
-    w_downward = 0.25
+    w_upward = 0.35
+    w_downward = 0.30
 
-    w_action = 0.0007
-    w_joint_vel = 0.0005
+    w_action = 0.0005
+    w_joint_vel = 0.0003
     w_limit = 0.5
     w_tip_limit = 0.15
-    w_under_drum = 0.12
+    w_under_drum = 0.08
 
     """ 시각화 설정 """
-    enable_visualization: bool = True
+    enable_visualization: bool = False
 
 
