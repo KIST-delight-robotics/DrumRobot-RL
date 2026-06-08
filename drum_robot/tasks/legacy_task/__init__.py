@@ -111,3 +111,25 @@ gym.register(
   --num_envs=1 \
   --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_rrdr/checkpoints/agent_5000000.pt"
 """
+
+# Rhythmic Drum Striking
+# 랜덤으로 RDS를 생성해서 정해진 타이밍에 목표 드럼을 타격하는 동작 학습
+# 처음부터 랜덤 RDS로 학습함
+
+gym.register(
+    id="DrumRobot-rhythmic_drum_striking-Direct-v0",     # id : 실행할 때 사용할 이름
+    entry_point=f"{__name__}.rds_env:DrumRobotEnv",  # 환경 클래스 위치
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.rds_cfg:DrumRobotEnvCfg",    # 설정 클래스 위치
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_rds_cfg.yaml",    # RL 알고리즘(skrl) 설정 경로를 알려줍니다.
+    },
+)
+
+"""
+../../../isaaclab.sh \
+  -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
+  --task=DrumRobot-rhythmic_drum_striking-Direct-v0 \
+  --num_envs=1 \
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_rds/checkpoints/agent_5000000.pt"
+"""

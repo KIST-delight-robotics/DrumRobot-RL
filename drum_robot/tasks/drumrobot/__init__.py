@@ -36,5 +36,5 @@ gym.register(
   -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-drum_score-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-15_18-11-06_ppo_torch_drum_score/checkpoints/agent_1000000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-26_09-36-19_ppo_torch_drum_score/checkpoints/agent_5000000.pt"
 """
