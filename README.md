@@ -8,16 +8,17 @@
 
 1. [프로젝트 개요](#1-프로젝트-개요)
 2. [개발 환경](#2-개발-환경)
-3. [프로젝트 구조](#3-프로젝트-구조)
-4. [핵심 개념](#4-핵심-개념)
+3. [환경 구축 방법](#3-환경-구축-방법)
+4. [프로젝트 구조](#4-프로젝트-구조)
+5. [핵심 개념](#5-핵심-개념)
    - [RDS (Robotic Drum Score)](#rds-robotic-drum-score)
    - [관측 공간 (Observation Space)](#관측-공간-observation-space)
    - [행동 공간 (Action Space)](#행동-공간-action-space)
    - [보상 함수 (Reward Function)](#보상-함수-reward-function)
-5. [환경 실행 흐름](#5-환경-실행-흐름)
-6. [모듈 상세 설명](#6-모듈-상세-설명)
-7. [실행 방법](#7-실행-방법)
-8. [주요 설정값](#8-주요-설정값)
+6. [환경 실행 흐름](#6-환경-실행-흐름)
+7. [모듈 상세 설명](#7-모듈-상세-설명)
+8. [실행 방법](#8-실행-방법)
+9. [주요 설정값](#9-주요-설정값)
 
 ---
 
@@ -51,7 +52,53 @@ PhysX   : GPU (cuda:0)
 
 ---
 
-## 3. 프로젝트 구조
+## 3. 환경 구축 방법
+
+본 프로젝트는 Isaac Lab 공식 레포에 **외부 extension** 형태로 얹어 사용합니다.
+
+### 3.1 Isaac Lab 공식 레포 클론
+
+```bash
+git clone https://github.com/isaac-sim/IsaacLab.git
+cd IsaacLab
+```
+
+### 3.2 drum_robot extension 배치
+
+본 레포의 코드를 Isaac Lab의 `source/extensions/` 아래 `drum_robot` 폴더로 넣습니다.
+
+```bash
+# IsaacLab 루트에서
+git clone https://github.com/KIST-delight-robotics/DrumRobot-RL.git source/extensions/drum_robot
+```
+
+결과적으로 아래와 같은 구조가 됩니다.
+
+```
+IsaacLab/
+├── isaaclab.sh                  # 공식 실행 런처
+└── source/
+    └── extensions/
+        └── drum_robot/          # ← 본 프로젝트
+            ├── extension.toml
+            ├── pyproject.toml
+            └── drum_robot/
+```
+
+- `extension.toml` → Isaac Sim(Kit)이 `drum_robot`을 extension으로 인식하게 해줍니다.
+- `pyproject.toml` → Isaac Lab 설치 과정에서 `pip install -e .`로 파이썬 패키지로도 잡히게 해줍니다.
+
+### 3.3 실행 위치
+
+학습/추론은 모두 Isaac Lab 공식 런처인 `isaaclab.sh`로 실행합니다. 이 스크립트가 Isaac Sim의 Python 인터프리터와 환경변수를 잡아줍니다. 이후 본 README의 모든 실행 명령은 **`drum_robot/` 디렉터리 기준**입니다.
+
+```bash
+cd source/extensions/drum_robot
+```
+
+---
+
+## 4. 프로젝트 구조
 
 ```
 drum_robot/
@@ -75,7 +122,7 @@ drum_robot/
 
 ---
 
-## 4. 핵심 개념
+## 5. 핵심 개념
 
 ### RDS (Robotic Drum Score)
 
@@ -148,7 +195,7 @@ target_pos = current_pos + action × π × dt
 
 ---
 
-## 5. 환경 실행 흐름
+## 6. 환경 실행 흐름
 
 ```
 초기화
@@ -176,7 +223,7 @@ target_pos = current_pos + action × π × dt
 
 ---
 
-## 6. 모듈 상세 설명
+## 7. 모듈 상세 설명
 
 ### `drumrobot_env.py` — 메인 환경
 
@@ -225,12 +272,15 @@ target_pos = current_pos + action × π × dt
 
 ---
 
-## 7. 실행 방법
+## 8. 실행 방법
+
+> 모든 명령은 `source/extensions/drum_robot/` 디렉터리에서 실행합니다.
+> `../../../isaaclab.sh` 는 IsaacLab 루트의 공식 런처를 가리킵니다.
 
 ### 학습
 
 ```bash
-./isaaclab.sh -p source/extensions/drum_robot/drum_robot/scripts/reinforcement_learning/skrl/train.py \
+../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py \
   --task=DrumRobot-drum_score-Direct-v0 \
   --num_envs=4096 \
   --headless
@@ -239,7 +289,7 @@ target_pos = current_pos + action × π × dt
 ### 체크포인트 이어서 학습
 
 ```bash
-./isaaclab.sh -p .../train.py \
+../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py \
   --task=DrumRobot-drum_score-Direct-v0 \
   --num_envs=4096 \
   --headless \
@@ -249,7 +299,7 @@ target_pos = current_pos + action × π × dt
 ### 추론 (시각화 포함)
 
 ```bash
-./isaaclab.sh -p .../play.py \
+../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-drum_score-Direct-v0 \
   --num_envs=1 \
   --checkpoint="logs/skrl/drum_robot/.../checkpoints/agent_100000.pt"
@@ -257,7 +307,7 @@ target_pos = current_pos + action × π × dt
 
 ---
 
-## 8. 주요 설정값
+## 9. 주요 설정값
 
 > `drumrobot_cfg.py`에서 수정 가능한 핵심 파라미터
 

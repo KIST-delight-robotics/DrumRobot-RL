@@ -2,8 +2,15 @@
 __pycache__/
 *.py[cod]
 
+# Python build artifacts
+*.egg-info/
+*.pyc
+
 # Logs
 logs/
 
 # Outputs
 outputs/
+
+# Local-only
+legacy_task/
