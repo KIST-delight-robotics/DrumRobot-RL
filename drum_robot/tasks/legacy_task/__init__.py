@@ -28,8 +28,8 @@ gym.register(
   --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_pr/checkpoints/agent_800000.pt"
 """
 
-# Drum Reaching
-# 양 팔의 팁 위치를 목표 드럼으로 수렴하는 동작 학습
+# Drum Striking
+# 양 팔이 목표 드럼을 타격하는 동작 학습
 
 gym.register(
     id="DrumRobot-drum_reaching-Direct-v0",     # id : 실행할 때 사용할 이름
@@ -72,8 +72,8 @@ gym.register(
   --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_ds/checkpoints/agent_100000.pt"
 """
 
-# Rhythmic Drum Reaching
-# RDS 기반 악보 정보를 관측하여 정해진 타이밍에 목표 드럼을 수렴하는 동작 학습
+# Rhythmic Drum Striking
+# RDS 기반 악보 정보를 관측하여 정해진 타이밍에 목표 드럼을 타격하는 동작 학습
 
 gym.register(
     id="DrumRobot-rhythmic_drum_reaching-Direct-v0",     # id : 실행할 때 사용할 이름
@@ -94,8 +94,8 @@ gym.register(
   --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_rdr/checkpoints/agent_1000000.pt"
 """
 
-# Random Rhythmic Drum Reaching
-# 랜덤으로 RDS를 생성해서 정해진 타이밍에 목표 드럼을 수렴하는 동작 학습
+# Rhythmic Drum Striking
+# 랜덤으로 RDS를 생성해서 정해진 타이밍에 목표 드럼을 타격하는 동작 학습
 # 기존 MIDI를 사용하여 100K 학습된 체크포인트에서 랜덤 RDS로 학습함 (처음부터 랜덤 RDS를 사용하면 수렴하지 못함)
 
 gym.register(
