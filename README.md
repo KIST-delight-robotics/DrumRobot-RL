@@ -324,3 +324,61 @@ target_pos = current_pos + action × π × dt
 | `inst_noise_scale` | 0.02m | 드럼 위치 노이즈 |
 | `max_lookahead_time` | 1.0s | 미래 타격 관측 범위 |
 | `num_hits` | 3 | 관측하는 미래 타격 이벤트 수 |
+
+---
+
+## 10. 로봇 관절 정보
+
+### 10.1 관절 인덱스 및 축 방향
+
+Isaac Sim이 로드한 articulation의 관절 순서와, URDF 정의 기준 양의 회전 방향이 의도한 방향과 일치하는지 확인한 결과입니다. URDF/USD 수정 시 참고하세요.
+
+| Index | Joint Name | Axis Direction |
+|:-----:|:-----------|:--------------:|
+| 00 | `waist_joint` | + |
+| 01 | `head` | + |
+| 02 | `left_shoulder_1` | − |
+| 03 | `right_shoulder_1` | − |
+| 04 | `head_2` | + |
+| 05 | `left_shoulder_2` | − |
+| 06 | `right_shoulder_2` | + |
+| 07 | `left_elbow` | − |
+| 08 | `right_elbow` | + |
+| 09 | `left_wrist` | + |
+| 10 | `right_wrist` | − |
+
+> **참고:** 관절 이름과 인덱스 매핑은 `scripts/print_joint_names_only.py`를 실행해 재확인할 수 있습니다.
+
+### 10.2 관절 가동 범위 (제어 대상 9-DOF)
+
+강화학습에서 제어하는 9개 관절의 가동 범위입니다. (단위: rad, 출력 시 `math.pi/180` 변환 적용)
+
+```python
+joint_limits = {
+    "waist_joint":      (-90 * math.pi/180,  90 * math.pi/180),
+    "left_shoulder_1":  ( 30 * math.pi/180, 180 * math.pi/180),
+    "left_shoulder_2":  (-10 * math.pi/180,   0 * math.pi/180),
+    "left_elbow":       (  0 * math.pi/180, 140 * math.pi/180),
+    "left_wrist":       (-90 * math.pi/180,  90 * math.pi/180),
+    "right_shoulder_1": (  0 * math.pi/180, 150 * math.pi/180),
+    "right_shoulder_2": (-10 * math.pi/180,   0 * math.pi/180),
+    "right_elbow":      (  0 * math.pi/180, 140 * math.pi/180),
+    "right_wrist":      (-90 * math.pi/180,  90 * math.pi/180),
+}
+```
+
+도(deg) 단위로 보면:
+
+| Joint | Min (°) | Max (°) | Range (°) |
+|:------|--------:|--------:|----------:|
+| `waist_joint`      | −90 |  90 | 180 |
+| `left_shoulder_1`  |  30 | 180 | 150 |
+| `left_shoulder_2`  | −10 |   0 |  10 |
+| `left_elbow`       |   0 | 140 | 140 |
+| `left_wrist`       | −90 |  90 | 180 |
+| `right_shoulder_1` |   0 | 150 | 150 |
+| `right_shoulder_2` | −10 |   0 |  10 |
+| `right_elbow`      |   0 | 140 | 140 |
+| `right_wrist`      | −90 |  90 | 180 |
+
+> **참고:** `shoulder_2` 관절의 범위가 10°로 매우 좁은데, 이는 자가 충돌 회피 및 어깨 구조상의 물리적 한계를 반영한 값입니다. 수정 시 시뮬레이션에서 자가 충돌 여부를 반드시 재확인하세요.
