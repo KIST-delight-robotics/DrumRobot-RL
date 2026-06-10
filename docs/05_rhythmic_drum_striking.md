@@ -27,9 +27,11 @@
 
 ![GIF](./gif/05.gif)
 
-- 정량적 결과 (성공률, 학습 곡선, 체크포인트 step 수)
-- 정성적 결과 (영상이 있다면 링크, 또는 텍스트 설명)
+보상 그래프 첨부 예정
+
 reward=0.025 | proximity_term=0.006 | progress(x100)=0.310 | strike_phase_term=0.352 | rearm_phase_term=0.068 | action_l2=5.620 | joint_vel_l2=3.493 | limit_pen=0.000 | tip_limit_pen=0.000 | under_drum_pen=0.537 | success_rate=0.188 | wrong_rate=0.440 | miss_rate=0.372 | snare_success_rate=0.152 | floor_success_rate=0.051 | mid_success_rate=0.136 | high_success_rate=0.274 | hihat_success_rate=0.265 | ride_success_rate=0.222 | crash1_success_rate=0.361 | crash2_success_rate=0.113
+
+텍스트로 결과 설명
 
 ## 5. 무엇이 잘 됐는가
 - 의도한 대로 동작한 부분

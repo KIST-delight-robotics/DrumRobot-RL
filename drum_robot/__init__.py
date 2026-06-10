@@ -18,3 +18,10 @@ conda deactivate
 
 """
 
+"""
+텐서보드 실행
+
+tensorboard --logdir logs/
+"""
+
+from .tasks.legacy_task import *

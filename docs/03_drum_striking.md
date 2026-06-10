@@ -27,9 +27,11 @@
 
 ![GIF](./gif/03.gif)
 
-- 정량적 결과 (성공률, 학습 곡선, 체크포인트 step 수)
-- 정성적 결과 (영상이 있다면 링크, 또는 텍스트 설명)
+보상 그래프 첨부 예정
+
 reward=0.665 | idle=-0.203 | lift=0.395 | descend=0.605 | return=0.307 | success_motion_pen=0.106 | action_l2=7.560 | joint_vel_l2=1.584 | limit_pen=0.000 | left_success_rate=0.964 | right_success_rate=0.986 | episode_success_rate=0.959 | left_fail_rate=0.025 | right_fail_rate=0.020
+
+텍스트로 결과 설명
 
 ## 5. 무엇이 잘 됐는가
 - 의도한 대로 동작한 부분

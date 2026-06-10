@@ -27,9 +27,11 @@
 
 ![GIF](./gif/02.gif)
 
-- 정량적 결과 (성공률, 학습 곡선, 체크포인트 step 수)
-- 정성적 결과 (영상이 있다면 링크, 또는 텍스트 설명)
+보상 그래프 첨부 예정
+
 reward=0.593 | left_xy_dist=0.049 | right_xy_dist=0.040 | left_z_err=0.045 | right_z_err=0.043 | downward_term=0.164 | upward_term=0.045 | action_l2=4.974 | joint_vel_l2=0.905 | limit_pen=0.000 | impact_armed_L=0.135 | impact_armed_R=0.272 | first_hit_L=0.000 | first_hit_R=0.000
+
+텍스트로 결과 설명
 
 ## 5. 무엇이 잘 됐는가
 - 의도한 대로 동작한 부분
