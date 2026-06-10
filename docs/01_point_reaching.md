@@ -94,7 +94,7 @@ reward = w_dist * (-dist_sum)              # 거리 음의 보상 (w=0.3)
 
 ## 4. 결과
 
-!(./gif/01.gif)
+![결과GIF](./gif/01.gif)
 
 reward=1.196 | L_dist=0.090 | R_dist=0.157 | dist_sum=0.248 | action_l2=5.834 | limit_pen=0.001 | died=0.001 | success_rate=0.031
 
