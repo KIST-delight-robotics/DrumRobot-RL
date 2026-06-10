@@ -53,7 +53,7 @@ class DrumRobotEnv(DirectRLEnv):
         self._init_obs_norm_stats()  # 관측값 정규화를 위한 변수 초기화
 
         # 로그
-        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=100000, sample_env_id=0))
+        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=2000, sample_env_id=0))
         
         # RDS initializer
         self.rds_initializer = RdsInitializer(

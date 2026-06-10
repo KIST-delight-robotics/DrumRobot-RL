@@ -22,6 +22,7 @@
 ## 4. 결과
 - 정량적 결과 (성공률, 학습 곡선, 체크포인트 step 수)
 - 정성적 결과 (영상이 있다면 링크, 또는 텍스트 설명)
+reward=0.178 | proximity=0.016 | progress(x100)=0.287 | upward=0.200 | downward=0.138 | action_l2=5.793 | joint_vel_l2=3.755 | limit_pen(x100)=0.007 | tip_limit_pen=0.019 | under_drum_pen=0.132 | success_rate=0.593 | wrong_rate=0.189 | miss_rate=0.407 | snare_success_rate=0.665 | snare_wrong_rate=0.204 | snare_miss_rate=0.335 | floor_success_rate=0.668 | floor_wrong_rate=0.206 | floor_miss_rate=0.332 | mid_success_rate=0.702 | mid_wrong_rate=0.363 | mid_miss_rate=0.298 | high_success_rate=0.623 | high_wrong_rate=0.341 | high_miss_rate=0.377 | hihat_success_rate=0.626 | hihat_wrong_rate=0.102 | hihat_miss_rate=0.374 | ride_success_rate=0.416 | ride_wrong_rate=0.104 | ride_miss_rate=0.584 | crash1_success_rate=0.551 | crash1_wrong_rate=0.082 | crash1_miss_rate=0.449 | crash2_success_rate=0.490 | crash2_wrong_rate=0.108 | crash2_miss_rate=0.510
 
 ## 5. 무엇이 잘 됐는가
 - 의도한 대로 동작한 부분
