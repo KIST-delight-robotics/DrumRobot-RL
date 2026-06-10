@@ -47,4 +47,3 @@ reward=0.025 | proximity_term=0.006 | progress(x100)=0.310 | strike_phase_term=0
 
 ## 8. 회고 / 배운 점
 - 이 실험에서 얻은 인사이트
-- 다시 한다면 어떻게 다르게 할 것인가

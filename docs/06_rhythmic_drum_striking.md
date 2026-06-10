@@ -47,4 +47,3 @@ reward=0.178 | proximity=0.016 | progress(x100)=0.287 | upward=0.200 | downward=
 
 ## 8. 회고 / 배운 점
 - 이 실험에서 얻은 인사이트
-- 다시 한다면 어떻게 다르게 할 것인가

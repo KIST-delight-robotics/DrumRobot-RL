@@ -47,4 +47,3 @@ reward=-0.265 | proximity_term=0.012 | progress=0.001 | action_l2=4.963 | joint_
 
 ## 8. 회고 / 배운 점
 - 이 실험에서 얻은 인사이트
-- 다시 한다면 어떻게 다르게 할 것인가
