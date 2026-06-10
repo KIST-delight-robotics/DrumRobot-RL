@@ -1,5 +1,3 @@
-# source/extensions/drum_robot/drum_robot/tasks/test_sac/agents/skrl_ppo_cfg.yaml
-
 seed: 42
 
 

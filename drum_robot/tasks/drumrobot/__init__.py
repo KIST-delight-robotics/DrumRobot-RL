@@ -1,8 +1,3 @@
-
-"""
-path: drum_robot/tasks/drumrobot/__init__.py
-"""
-
 from __future__ import annotations
 
 import gymnasium as gym

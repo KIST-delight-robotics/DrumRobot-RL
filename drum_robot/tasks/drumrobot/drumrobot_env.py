@@ -1,10 +1,3 @@
-
-"""
-환경 클래스
-
-path: drum_robot/tasks/drumrobot/drumrobot_env.py
-"""
-
 from __future__ import annotations
 
 import torch

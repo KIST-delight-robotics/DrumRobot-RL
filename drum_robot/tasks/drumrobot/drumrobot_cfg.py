@@ -1,10 +1,3 @@
-
-"""
-설정 클래스
-
-path: drum_robot/tasks/drumrobot/drumrobot_cfg.py
-""" 
-
 from __future__ import annotations
 
 from isaaclab.assets import ArticulationCfg

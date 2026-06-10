@@ -1,5 +1,3 @@
-# source/extensions/drum_robot/drum_robot/tasks/test_sac/__init__.py
-
 from __future__ import annotations
 
 import gymnasium as gym

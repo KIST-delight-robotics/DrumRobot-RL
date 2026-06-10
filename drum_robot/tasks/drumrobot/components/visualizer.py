@@ -1,8 +1,5 @@
-
 """
 시각화 클래스 
-
-path: drum_robot/tasks/drumrobot/components/visualizer.py
 """
 
 from __future__ import annotations

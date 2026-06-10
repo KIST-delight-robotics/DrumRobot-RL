@@ -1,8 +1,5 @@
-
 """
 목표 악보(RDS: robotic drum score) 초기화 클래스 
-
-path: drum_robot/tasks/drumrobot/components/rds_initializer.py
 """
 
 from __future__ import annotations
