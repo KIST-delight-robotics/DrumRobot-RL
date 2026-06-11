@@ -380,7 +380,7 @@ class DrumRobotEnv(DirectRLEnv):
             self._translate_drum(self.inst_pos)
 
         # RDS 리셋
-        robotic_drum_score = self.rds_generator.reset_target(env_ids)
+        robotic_drum_score = self.rds_generator.reset_target_rand(env_ids)
         self.rds[env_ids] = robotic_drum_score
         self.rds_visit[env_ids] = False
 
