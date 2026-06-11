@@ -114,7 +114,7 @@ gym.register(
   --task=DrumRobot-random_rhythmic_drum_reaching-Direct-v0 \
   --num_envs=4096 \
   --headless \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/ppo_rrdr/checkpoints/agent_5000000.pt"
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/05_100K/checkpoints/agent_100000.pt"
 """
 
 # Rhythmic Drum Striking

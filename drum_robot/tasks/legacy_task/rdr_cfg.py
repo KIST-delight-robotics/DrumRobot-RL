@@ -183,7 +183,7 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     w_tip_limit = 2.0
 
     """ 시각화 설정 """
-    enable_visualization: bool = True
+    enable_visualization: bool = False
 
     color_L: tuple[float, float, float] = (0.0, 0.0, 1.0)
     color_R: tuple[float, float, float] = (1.0, 0.0, 0.0)

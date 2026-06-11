@@ -142,8 +142,8 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     tip_offset_right = (0.385, 0.0, -0.026)  # [m] in right_wrist frame
 
     # 마커 시각화
-    enable_target_markers: bool = True
-    enable_tip_markers: bool = True
+    enable_target_markers: bool = False
+    enable_tip_markers: bool = False
 
     target_marker_radius: float = 0.03
     target_marker_color: tuple[float, float, float] = (0.0, 0.0, 1.0)
