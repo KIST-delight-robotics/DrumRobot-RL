@@ -49,7 +49,7 @@ def get_default_ppo_cfg():
         },
         "trainer": {
             "class": "SequentialTrainer",
-            "timesteps": 1000000,
+            "timesteps": 700000,
             "checkpoint_interval": "auto",
             "close_environment_at_exit": False,
         },
