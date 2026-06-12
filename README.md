@@ -78,11 +78,24 @@ cd source/extensions/drum_robot
 
 ## 실행
 
+### 가상 환경
+```bash
+conda activate env_isaaclab
+```
+```bash
+conda deactivate
+```
+
+### 아이작 심 (빈 프로젝트)
+```bash
+../../../isaaclab.sh -s
+```
+
 ### 학습
 
 ```bash
 ../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py \
-  --task=DrumRobot-drum_score-Direct-v0 \
+  --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=4096 \
   --headless
 ```
@@ -91,19 +104,22 @@ cd source/extensions/drum_robot
 
 ```bash
 ../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py \
-  --task=DrumRobot-drum_score-Direct-v0 \
+  --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=4096 \
   --headless \
   --checkpoint="logs/skrl/.../checkpoints/agent_XX.pt"
 ```
 
-### 추론 (시각화)
+### 텐서보드
+```bash
+tensorboard --logdir logs/
+```
+
+### 시각화
 
 ```bash
 ../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/play.py \
-  --task=DrumRobot-drum_score-Direct-v0 \
+  --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=1 \
   --checkpoint="logs/skrl/.../checkpoints/agent_XX.pt"
 ```
-
-학습 모니터링, 로그 위치, 사고 대처는 [`docs/OPERATIONS.md`](docs/OPERATIONS.md) 참조.
