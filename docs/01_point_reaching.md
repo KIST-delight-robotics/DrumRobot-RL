@@ -96,7 +96,7 @@ Isaac Lab + skrl(PPO) 위에서 **9-DOF 양팔 로봇이 강화학습으로 의�
 
 ![GIF](./gif/01.gif)
 
-![보상 그래프]()
+![보상 그래프](./png/01_reward.png)
 
 체크포인트 800K step에서 측정한 핵심 지표:
 

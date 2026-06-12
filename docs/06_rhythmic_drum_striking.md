@@ -119,7 +119,7 @@ success_reward = Σ_drum (성공 여부 × w_inst_success_per_drum)
 
 ![GIF](./gif/06.gif)
 
-![보상 그래프]()
+![보상 그래프](./png/06_reward.png)
 
 체크포인트 1M step에서 측정한 핵심 지표:
 
