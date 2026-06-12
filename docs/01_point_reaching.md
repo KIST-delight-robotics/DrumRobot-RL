@@ -94,11 +94,15 @@ Isaac Lab + skrl(PPO) 위에서 **9-DOF 양팔 로봇이 강화학습으로 의�
 
 ## 4. 결과
 
-![GIF](./gif/01.gif)
+**학습된 정책 동작**
 
-![보상 그래프](./png/01_reward.png)
+<img src="./gif/01.gif" width="600">
 
-체크포인트 800K step에서 측정한 핵심 지표:
+**학습 곡선 (total reward vs step)**
+
+<img src="./png/01_reward.png" width="600">
+
+**측정 지표**
 
 | 지표 | 값 | 의미 |
 |---|---|---|

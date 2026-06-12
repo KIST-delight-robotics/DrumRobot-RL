@@ -109,11 +109,15 @@ Idle 위치를 양손 팁의 3D 좌표만이 아니라 허리 관절의 idle 각
 
 ## 4. 결과
 
-![GIF](./gif/05.gif)
+**학습된 정책 동작**
 
-![보상 그래프](./png/05_reward.png)
+<img src="./gif/05.gif" width="600">
 
-체크포인트 1M step에서 측정한 핵심 지표:
+**학습 곡선 (total reward vs step)**
+
+<img src="./png/05_reward.png" width="600">
+
+**측정 지표**
 
 | 지표 | 값 |
 |---|---|

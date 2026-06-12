@@ -117,11 +117,15 @@ success_reward = Σ_drum (성공 여부 × w_inst_success_per_drum)
 
 ## 4. 결과
 
-![GIF](./gif/06.gif)
+**학습된 정책 동작**
 
-![보상 그래프](./png/06_reward.png)
+<img src="./gif/06.gif" width="600">
 
-체크포인트 1M step에서 측정한 핵심 지표:
+**학습 곡선 (total reward vs step)**
+
+<img src="./png/06_reward.png" width="600">
+
+**측정 지표**
 
 | 지표 | 값 | 의미 |
 |---|---|---|

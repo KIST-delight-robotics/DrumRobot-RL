@@ -105,11 +105,15 @@ DESCEND의 지수 shaping 계수가 매우 가파른 점이 중요하다 (k=80, 
 
 ## 4. 결과
 
-![GIF](./gif/03.gif)
+**학습된 정책 동작**
 
-![보상 그래프](./png/03_reward.png)
+<img src="./gif/03.gif" width="600">
 
-체크포인트 100K step에서 측정한 핵심 지표:
+**학습 곡선 (total reward vs step)**
+
+<img src="./png/03_reward.png" width="600">
+
+**측정 지표**
 
 | 지표 | 왼손 | 오른손 | 의미 |
 |---|---|---|---|

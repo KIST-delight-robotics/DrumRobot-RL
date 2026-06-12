@@ -96,11 +96,15 @@ xy와 z를 분리한 이유: 드럼 타격은 평면에서 정렬한 뒤 z 방�
 
 ## 4. 결과
 
-![GIF](./gif/02.gif)
+**학습된 정책 동작**
 
-![보상 그래프](./png/02_reward.png)
+<img src="./gif/02.gif" width="600">
 
-체크포인트 700K step에서 측정한 핵심 지표:
+**학습 곡선 (total reward vs step)**
+
+<img src="./png/02_reward.png" width="600">
+
+**측정 지표**
 
 | 지표 | 왼손 | 오른손 | 의미 |
 |---|---|---|---|

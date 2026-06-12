@@ -116,11 +116,15 @@ FSM을 버리고 가벼운 판정으로 돌아간 이유는, RDS의 노트 시�
 
 ## 4. 결과
 
-![GIF](./gif/04.gif)
+**학습된 정책 동작**
 
-![보상 그래프](./png/04_reward.png)
+<img src="./gif/04.gif" width="600">
 
-체크포인트 1M step에서 측정한 핵심 지표:
+**학습 곡선 (total reward vs step)**
+
+<img src="./png/04_reward.png" width="600">
+
+**측정 지표**
 
 | 지표 | 값 | 의미 |
 |---|---|---|
