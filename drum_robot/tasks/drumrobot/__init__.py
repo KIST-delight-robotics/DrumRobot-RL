@@ -13,23 +13,3 @@ gym.register(
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",    # RL 알고리즘(skrl) 설정 경로를 알려줍니다.
     },
 )
-
-"""
-체크포인트 불러와서 학습 실행 명령어
-
-../../../isaaclab.sh \
-  -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
-  --task=DrumRobot-drum_robot-Direct-v0 \
-  --num_envs=4096 \
-  --headless \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-22_09-11-39_ppo_torch_drum_score/checkpoints/agent_5000000.pt"
-
-
-테스트 명령어
-
-../../../isaaclab.sh \
-  -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
-  --task=DrumRobot-drum_robot-Direct-v0 \
-  --num_envs=1 \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-26_09-36-19_ppo_torch_drum_score/checkpoints/agent_5000000.pt"
-"""
