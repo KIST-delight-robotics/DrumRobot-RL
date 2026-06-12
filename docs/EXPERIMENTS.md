@@ -48,6 +48,22 @@
 
 ---
 
+## SAC 알고리즘
+
+- 필요하면 SAC 뿐만 아니라 다른 알고리즘도 사용할 수 있음.
+
+### 실행 방법
+```
+../../../isaaclab.sh \
+  -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
+  --task=DrumRobot-test_sac-Direct-v0 \
+  --num_envs=4096 \
+  --algorithm=SAC \
+  --headless
+```
+
+---
+
 ## 이 문서의 한계
 
 여기 "안 됐다"고 적힌 접근은 모두 **시도한 시점의 구조 안에서** 의 결과다. 다른 구조와 결합되면 다르게 작동할 수 있다 — 실제로 "goal-dominant 보상" 과 "타격 판정 엄격화" 는 관측이 거대 sparse 형태였던 시점에는 안 됐지만, 관측 압축과 결합되면서 작동했다.

@@ -10,12 +10,6 @@
 - `directory`, `experiment_name`, 저장 주기는 `drum_robot/tasks/drumrobot/agents/skrl_ppo_cfg.yaml`에서 설정
 - 기본은 `auto` — 학습 전체의 10%마다 저장
 
-## 텐서보드
-
-```bash
-tensorboard --logdir logs/
-```
-
 ## 학습 검증 방법
 
 - `total reward` 곡선이 초반에 수렴 추세인지 확인. 발산하거나 수렴 못 하면 폐기하고 다시.

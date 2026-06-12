@@ -14,13 +14,3 @@ gym.register(
         "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
     },
 )
-
-"""
-../../../isaaclab.sh \
-  -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
-  --task=DrumRobot-test_sac-Direct-v0 \
-  --num_envs=4096 \
-  --algorithm=SAC \
-  --headless \
-  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/folder_name/checkpoints/agent_100000.pt"
-"""
