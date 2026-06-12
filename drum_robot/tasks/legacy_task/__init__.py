@@ -133,6 +133,12 @@ gym.register(
 
 """
 ../../../isaaclab.sh \
+  -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
+  --task=DrumRobot-rhythmic_drum_striking-Direct-v0 \
+  --num_envs=1 \
+  --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/06_1M/checkpoints/agent_1000000.pt"
+
+../../../isaaclab.sh \
   -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
   --task=DrumRobot-rhythmic_drum_striking-Direct-v0 \
   --num_envs=4096 \
