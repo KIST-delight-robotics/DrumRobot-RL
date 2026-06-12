@@ -23,5 +23,3 @@ conda deactivate
 
 tensorboard --logdir logs/
 """
-
-from .tasks.legacy_task import *
