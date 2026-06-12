@@ -56,11 +56,13 @@ git clone https://github.com/KIST-delight-robotics/DrumRobot-RL.git source/exten
 
 ```
 IsaacLab/
-├── isaaclab.sh
-└── source/extensions/drum_robot/
-    ├── extension.toml
-    ├── pyproject.toml
-    └── drum_robot/
+├── isaaclab.sh                  # 공식 실행 런처
+└── source/
+    └── extensions/
+        └── drum_robot/          # ← 본 프로젝트
+            ├── extension.toml
+            ├── pyproject.toml
+            └── drum_robot/
 ```
 
 - `extension.toml` → Isaac Sim (Kit) 이 extension으로 인식.
