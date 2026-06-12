@@ -5,7 +5,7 @@ import gymnasium as gym
 from . import agents
 
 gym.register(
-    id="DrumRobot-drum_score-Direct-v0",     # id : 실행할 때 사용할 이름
+    id="DrumRobot-drum_robot-Direct-v0",     # id : 실행할 때 사용할 이름
     entry_point=f"{__name__}.drumrobot_env:DrumRobotEnv",  # 환경 클래스 위치
     disable_env_checker=True,
     kwargs={
@@ -19,7 +19,7 @@ gym.register(
 
 ../../../isaaclab.sh \
   -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
-  --task=DrumRobot-drum_score-Direct-v0 \
+  --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=4096 \
   --headless \
   --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-22_09-11-39_ppo_torch_drum_score/checkpoints/agent_5000000.pt"
@@ -29,7 +29,7 @@ gym.register(
 
 ../../../isaaclab.sh \
   -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
-  --task=DrumRobot-drum_score-Direct-v0 \
+  --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=1 \
   --checkpoint="/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/logs/skrl/drum_robot/2026-05-26_09-36-19_ppo_torch_drum_score/checkpoints/agent_5000000.pt"
 """

@@ -52,7 +52,7 @@ agent:
   # logging and checkpoint
   experiment:
     directory: "drum_robot"
-    experiment_name: "drum_score"
+    experiment_name: "drum_robot"
     write_interval: auto
     checkpoint_interval: auto
 

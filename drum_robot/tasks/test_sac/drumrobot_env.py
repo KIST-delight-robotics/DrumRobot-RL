@@ -12,7 +12,7 @@ from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
 
 from .drumrobot_cfg import DrumRobotEnvCfg
 from drum_robot.utils.logger import EnvLogger, LoggerCfg
-from drum_robot.tasks.legacy_task.components.drum_robot_rds_generator import RdsGeneratorCfg, RdsGenerator
+from .components.drum_robot_rds_generator import RdsGeneratorCfg, RdsGenerator
 
 import numpy as np
 import gymnasium as gym
