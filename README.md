@@ -96,7 +96,7 @@ conda deactivate
 ### 학습
 
 ```bash
-../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py \
+../../../isaaclab.sh -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
   --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=4096 \
   --headless
@@ -105,7 +105,7 @@ conda deactivate
 ### 체크포인트 이어서 학습
 
 ```bash
-../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py \
+../../../isaaclab.sh -p drum_robot/scripts/reinforcement_learning/skrl/train.py \
   --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=4096 \
   --headless \
@@ -120,7 +120,7 @@ tensorboard --logdir logs/
 ### 시각화
 
 ```bash
-../../../isaaclab.sh -p scripts/reinforcement_learning/skrl/play.py \
+../../../isaaclab.sh -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=1 \
   --checkpoint="logs/skrl/.../checkpoints/agent_XX.pt"

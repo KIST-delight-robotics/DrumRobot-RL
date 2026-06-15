@@ -1,6 +1,5 @@
-
 """
-악보 생성 클래스 
+목표 악보(RDS: robotic drum score) 초기화 클래스 
 """
 
 from __future__ import annotations
@@ -67,7 +66,7 @@ GENERAL_MIDI_PERCUSSION_KEY_MAP = {
 MIDI_FOLDER_PATH = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/MIDIs"
 
 @dataclass
-class RdsGeneratorCfg:
+class RdsInitializerCfg:
 
     # 에피소드 시간
     episode_length_s: float = 5.0
@@ -121,9 +120,9 @@ class RdsGeneratorCfg:
         "58",   # 뭔지 모르겠음
     }
 
-class RdsGenerator:
+class RdsInitializer:
 
-    def __init__(self, num_envs: int, device: torch.device | str, cfg: RdsGeneratorCfg):
+    def __init__(self, num_envs: int, device: torch.device | str, cfg: RdsInitializerCfg):
         self.num_envs = int(num_envs)
         self.device = torch.device(device)
         self.cfg = cfg
@@ -310,11 +309,12 @@ class RdsGenerator:
 
         return score
 
-    def reset_target(self, env_ids, temperature=0.5):
+    def _reset_target_midi(self, env_ids, selection_strength=0.5):
         weights = self.score.clone()
 
-        # temperature 랜덤성 조절
-        weights = torch.pow(weights, temperature)
+        # selection_strength 랜덤성 조절 (0 <= selection_strength < 1)
+        # 값이 클수록 스코어 기준으로 선별, 값이 0이면 완전 랜덤
+        weights = torch.pow(weights, selection_strength)
 
         probs = weights / (weights.sum() + 1e-6)
 
@@ -325,15 +325,14 @@ class RdsGenerator:
             replacement=True    # 같은 인덱스가 여러 번 뽑힐 수 있음
         )
 
-        robotic_drum_score = self.rds[idx]
-        return robotic_drum_score
+        return self.rds[idx]
 
-    def reset_target_rand(self, env_ids):
+    def _reset_target_rand(self, env_ids):
         N = len(env_ids)
         T = self.episode_length
         M = self.cfg.num_drum
 
-        robotic_drum_score = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
+        rds_rand = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
 
         s = self.cfg.start_offset_steps
         e = T - self.cfg.hit_window_step
@@ -345,6 +344,39 @@ class RdsGenerator:
             time_rand = torch.randint(si, ei, (N,), device=self.device)
             inst_rand = torch.randint(0, M, (N,), device=self.device)
 
-            robotic_drum_score[torch.arange(N), time_rand, inst_rand] = 1
+            rds_rand[torch.arange(N), time_rand, inst_rand] = 1
 
-        return robotic_drum_score
+        return rds_rand
+    
+    def reset_target(self, env_ids, score_ratio=0.5, selection_strength=0.5):
+        N = len(env_ids)
+
+        num_score = int(N * score_ratio)
+
+        perm = torch.randperm(N, device=self.device)    # 0~N 사이의 정수를 무작위로 섞어서 텐서 만들기
+        score_env_ids = env_ids[perm[:num_score]]
+        rand_env_ids = env_ids[perm[num_score:]]
+
+        outputs = []
+
+        # -------------------
+        # score-based
+        # -------------------
+        if num_score > 0:
+            out_score = self._reset_target_midi(
+                score_env_ids,
+                selection_strength=selection_strength
+            )
+            outputs.append(out_score)
+
+        # -------------------
+        # random-based
+        # -------------------
+        if N - num_score > 0:
+            out_rand = self._reset_target_rand(rand_env_ids)
+            outputs.append(out_rand)
+
+        # -------------------
+        # merge
+        # -------------------
+        return torch.cat(outputs, dim=0)

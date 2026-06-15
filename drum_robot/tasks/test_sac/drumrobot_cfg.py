@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import gymnasium as gym
-
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -25,11 +23,10 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     """ 기본 환경 설정 """
     decimation = 2  # 정책(Policy) 업데이트 한 번당 시뮬레이션 스텝 수
     episode_length_s = 5.0  # 에피소드 최대 길이 (초)
-    # action_space = 9       # 로봇 제어 차원
-    action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(9,))   # 행동 공간이 제한되지 않았다면, 랜덤 탐험을 수행하기 때문에 샘플링된 랜덤 행동이 제한되지 않고 값이 거의 무한대에 가까워진다고 함
-    observation_space = 288  # 관측 차원
+    action_space = 9       # 로봇 제어 차원
+    observation_space = 94  # 관측 차원
     state_space = 0
-    action_scale = 0.05
+    action_scale = math.pi
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(
@@ -127,68 +124,50 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     tip_offset_left = (0.385, 0.0, -0.023)   # [m]
     tip_offset_right = (0.385, 0.0, -0.026)  # [m]
 
-    # state 들어가는 악보 길이
-    rds_observation_length: int = 30
-
-    # 초기 관절각 범위
-    init_joint_range = {
-        "waist_joint":          (-30*math.pi/180,   30*math.pi/180),
-        "left_shoulder_1":      ( 60*math.pi/180,   120*math.pi/180),
-        "left_shoulder_2":      (-40*math.pi/180,   50*math.pi/180),
-        "left_elbow":           ( 60*math.pi/180,   120*math.pi/180),
-        "right_shoulder_1":     ( 60*math.pi/180,   120*math.pi/180),
-        "right_shoulder_2":     (-40*math.pi/180,   50*math.pi/180),
-        "right_elbow":          ( 60*math.pi/180,   120*math.pi/180),
-        "left_wrist":           ( 20*math.pi/180,   50*math.pi/180),
-        "right_wrist":          ( 20*math.pi/180,   50*math.pi/180),
-    }
+    # 타격 관측
+    max_lookahead_time: float = 1.0    # 최대 관측 범위
+    num_hits: int = 3      # 최대 관측 타격 개수
 
     # 타격 판정
-    drum_xy_radius: float = 0.15
-    drum_z_margin: float = 0.10
-    min_impact_velocity: float = 0.5
-    rearm_height: float = 0.15
-    hit_window_step: int = 5
+    drum_xy_radius = 0.13      # 0.15 → 0.13
+    drum_z_range = 0.07        # 0.10 → 0.07
+    min_impact_velocity = 0.2  # 0.1 → 0.2
+    rearm_height = 0.18        # 0.15 → 0.18
+    hit_window_step = 10       # 일단 유지
 
     """ 보상 설정 """
     # 하이퍼 파라미터
     limit_margin = 0.08
-    alpha = 1.0
+    k_accuracy = 1.0
+    k_time_to_hit = 3.0
 
     # 팁이 가면 안되는 범위
     x_limit = 0.5
     y_limit_l = 0.2
     y_limit_h = 0.8
     z_limit = -0.6
-
-    # 팁의 대기 위치
-    idle_tip_pos = (-0.100, 0.361, -0.380)  # 스네어 위치에서 z +10cm
+    drum_xy_margin = 0.15
+    drum_z_margin = 0.05
 
     # 가중치
-    w_success = 0.5
-    w_wrong = 0.1
-    w_miss = 0.1
-    w_time_error = 0.1
+    w_success = 5.0
+    w_wrong = 1.5
+    w_miss = 2.0
+    w_time_accuracy = 5.0
 
-    w_progress = 10.0
-    w_proximity = 2.0
+    w_progress = 4.0
+    w_proximity = 1.5
+
+    w_upward = 0.35
+    w_downward = 0.30
 
     w_action = 0.0005
     w_joint_vel = 0.0003
-    w_limit = 0.2
-    w_tip_limit = 2.0
+    w_limit = 0.5
+    w_tip_limit = 0.15
+    w_under_drum = 0.08
 
     """ 시각화 설정 """
     enable_visualization: bool = False
-
-    color_L: tuple[float, float, float] = (0.0, 0.0, 1.0)
-    color_R: tuple[float, float, float] = (1.0, 0.0, 0.0)
-
-    tip_marker_radius: float = 0.015
-
-    drum_radius: float = 0.1
-    drum_height: float = 0.01
-
-    
 
 

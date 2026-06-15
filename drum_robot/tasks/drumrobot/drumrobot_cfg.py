@@ -168,6 +168,6 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     w_under_drum = 0.08
 
     """ 시각화 설정 """
-    enable_visualization: bool = True
+    enable_visualization: bool = False
 
 

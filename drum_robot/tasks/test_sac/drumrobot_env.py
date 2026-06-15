@@ -11,8 +11,11 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
 
 from .drumrobot_cfg import DrumRobotEnvCfg
+from .components.rds_initializer import RdsInitializerCfg, RdsInitializer
+from .components.robot_initializer import RobotInitializerCfg, RobotInitializer
+from .components.visualizer import VisualizerCfg, Visualizer
+
 from drum_robot.utils.logger import EnvLogger, LoggerCfg
-from .components.drum_robot_rds_generator import RdsGeneratorCfg, RdsGenerator
 
 import numpy as np
 import gymnasium as gym
@@ -43,29 +46,52 @@ class DrumRobotEnv(DirectRLEnv):
         self._init_obs_norm_stats()  # 관측값 정규화를 위한 변수 초기화
 
         # 로그
-        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=2000, sample_env_id=0))
+        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=100000, sample_env_id=0))
         
-        # RDS Generator
-        self.rds_generator = RdsGenerator(
+        # RDS initializer
+        self.rds_initializer = RdsInitializer(
             self.num_envs,
             self.device,
-            RdsGeneratorCfg(
+            RdsInitializerCfg(
                 episode_length_s=self.cfg.episode_length_s,
                 dt=self.dt,
                 num_drum=self.num_drum,
                 slow_factor=1.5,
                 start_offset_steps=20,
+                hit_window_step=self.cfg.hit_window_step,
             ),
         )
+
+        # 로봇 초기 위치 initializer
+        self.robot_initializer = RobotInitializer(
+            self.device,
+            RobotInitializerCfg(
+                num_ctrl_joint=len(self.ctrl_joint_names),
+                height_above_drum=0.1,
+                joint_noise_scale= 5*math.pi/180
+            ),
+            ctrl_joint_names=self.ctrl_joint_names,
+            instruments=self.cfg.instruments,
+        )
+
+        # 시각화
+        self.visualizer = Visualizer(
+            device=self.device,
+            cfg=VisualizerCfg(
+                enable_visualization=self.cfg.enable_visualization,
+                num_envs=self.num_envs,
+                num_drum=self.num_drum,
+                max_lookahead_step=self.max_lookahead_step,
+                hit_window_step=self.cfg.hit_window_step,
+            ),
+        )
+        self.visualizer.init_visualization(self.cfg.instruments)
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
         spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg()) # add ground plane
         self.scene.articulations["robot"] = self.robot  # add articulation to scene
         self.scene.clone_environments(copy_from_source=False)   # clone and replicate
-
-        if self.cfg.enable_visualization:
-            self._init_visualization()  # 시각화
         
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))  # 광원 추가
         light_cfg.func("/World/Light", light_cfg)
@@ -83,17 +109,25 @@ class DrumRobotEnv(DirectRLEnv):
         tip_pos = self.tip_pos
         inst_pos = self.inst_pos
 
-        # 악보
-        rds_window = self.get_rds_window(rds=self.rds, step=self.steps)    # 현재 위치 다음 스텝부터 미래 L개 스텝
-        self.rds_window = rds_window
+        # 다음 타격
+        next_hits = self._get_next_hits(rds=self.rds, step=self.steps)
+        self.next_hits = next_hits
+
+        # 로봇 상태
+        hit_armed = self.hit_armed
 
         obs = self._normalize_and_pack_obs(
             joint_pos=joint_pos,
             joint_vel=joint_vel,
             tip_pos=tip_pos,
             inst_pos=inst_pos,
-            rds_onehot=rds_window,
+            next_hits=next_hits,
+            hit_armed=hit_armed.float(),
             )
+        
+        if torch.isnan(obs).any():
+            raise RuntimeError("NaN obs")
+        
         return {"policy": obs}
 
     def _pre_physics_step(self, actions: torch.Tensor):
@@ -108,19 +142,23 @@ class DrumRobotEnv(DirectRLEnv):
         robot_q = self._convert_usd_to_robot(usd_q)
 
         # 목표 위치 = 현재 위치 + actions
-        robot_q_1 = robot_q + actions * self.cfg.action_scale
-        robot_q_1 = torch.max(torch.min(robot_q_1, self.joint_high), self.joint_low)  # joint_limit 내로 clip
-        usd_q_1 = self._convert_robot_to_usd(robot_q_1)
+        target_q_d = actions * self.cfg.action_scale
+        robot_q_next = robot_q + target_q_d * self.dt
+        robot_q_next = torch.max(torch.min(robot_q_next, self.joint_high), self.joint_low)  # joint_limit 내로 clip
+        usd_q_next = self._convert_robot_to_usd(robot_q_next)
 
         self.actions = actions.clone()
-        self.target_joint_pos = usd_q_1
+        self.target_joint_pos = usd_q_next
+
+        if torch.isnan(actions).any():
+            raise RuntimeError("NaN actions")
 
     def _apply_action(self):
         self.robot.set_joint_position_target(self.target_joint_pos, joint_ids=self.ctrl_joint_ids)
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         # 팁 위치
-        tip_pos = self._compute_tip_position()          # (num_envs, 2, 3)
+        tip_pos = self._compute_tip_position()          # (N, 2, 3)
         
         # 팁 속도
         prev_tip_pos = self.tip_pos
@@ -155,7 +193,7 @@ class DrumRobotEnv(DirectRLEnv):
         rds = self.rds
         wrong_hit = self._detect_wrong_hits(hit_mask, rds, steps)
 
-        # 윈도우 끝났을 때 타겟 성공 확인
+        # 윈도우 끝났을 때 타격 성공 확인
         success, missed_target, time_error = self._finalize_target_outcomes(
             rds=rds,
             rds_visit=self.rds_visit,
@@ -164,28 +202,41 @@ class DrumRobotEnv(DirectRLEnv):
 
         # re-arm 확인
         next_hit_armed = self._check_rearm(hit_armed, hit_per_arm, contact_mask, diff_z)
-        self.hit_armed = next_hit_armed
-
+        
         self.tip_pos = tip_pos
         self.tip_vel = tip_vel
         self.prev_tip_pos = prev_tip_pos
+        self.hit_armed = next_hit_armed
 
         # reward 로 넘기는 결과값
         self.success = success
         self.wrong_hit = wrong_hit
         self.missed_target = missed_target
         self.time_error = time_error
-
-        # 팁 표시
-        if self.cfg.enable_visualization:
-            self._translate_tip(self.tip_pos)
-            self._update_drum_color(self.rds_window, hit_mask)
+        self.hit_armed_for_reward = hit_armed
 
         # episode time out
         self.steps = self.steps + 1
         time_out = self.steps >= self.episode_length - 1
         # time_out = self.episode_length_buf >= self.max_episode_length - 1
         died = torch.zeros((self.num_envs,), device=self.device, dtype=torch.bool)
+
+        if time_out[0]:
+            eps = 1e-6
+            success_ratio = self.n_success / (self.n_hit + eps)
+            self.w_inst_success = 1.0 / (success_ratio + eps)
+
+            # 평균 1로 정규화
+            self.w_inst_success = (self.w_inst_success / self.w_inst_success.mean())
+
+            self.n_success[:] = 0
+            self.n_hit[:] = 0
+        else:
+            self.n_success = self.n_success + success.float().sum(dim=0)
+            self.n_hit = self.n_hit + success.float().sum(dim=0) + missed_target.float().sum(dim=0)
+
+        # 시각화 (팁 표시, 드럼 색상 변경)
+        self.visualizer.step(self.tip_pos, self.next_hits, hit_per_arm)
 
         return died, time_out
 
@@ -196,9 +247,10 @@ class DrumRobotEnv(DirectRLEnv):
         robot_vel = self._convert_usd_to_robot(usd_vel)
 
         (
-            goal_success, goal_wrong, goal_missed, time_error_term,
-            proximity_term, progress_term,
-            action_l2, joint_vel_l2, limit_pen, tip_limit
+            success_reward, wrong_cost, missed_cost, time_accuracy_reward,
+            proximity_cost, progress_reward,
+            upward_reward, downward_reward,
+            action_l2, joint_vel_l2, limit_pen, tip_limit_pen, under_drum_pen,
         ) = compute_reward_terms(
             success=self.success,
             wrong_hit=self.wrong_hit,
@@ -210,7 +262,10 @@ class DrumRobotEnv(DirectRLEnv):
             prev_left_tip_pos=self.prev_tip_pos[:, 0, :],
             prev_right_tip_pos=self.prev_tip_pos[:, 1, :],
             inst_pos=self.inst_pos,
-            rds_window=self.rds_window,
+            next_hits=self.next_hits,
+
+            tip_vel=self.tip_vel,
+            hit_armed=self.hit_armed_for_reward,
 
             joint_vel=robot_vel,
             action=self.actions,
@@ -218,95 +273,120 @@ class DrumRobotEnv(DirectRLEnv):
             joint_low=self.joint_low,
             joint_high=self.joint_high,
 
-            idle_tip_pos=self.idle_tip_pos,
+            w_inst_success=self.w_inst_success,
 
-            alpha=self.cfg.alpha,
+            k_accuracy=self.cfg.k_accuracy,
+            k_time_to_hit=self.cfg.k_time_to_hit,
             limit_margin=self.cfg.limit_margin,
 
             x_limit=self.cfg.x_limit,
             y_limit_l=self.cfg.y_limit_l,
             y_limit_h=self.cfg.y_limit_h,
             z_limit=self.cfg.z_limit,
+            drum_xy_margin=self.cfg.drum_xy_margin,
+            drum_z_margin=self.cfg.drum_z_margin,
         )
 
         reward = compute_rewards(
-            success_term=goal_success,
-            wrong_term=goal_wrong,
-            miss_term=goal_missed,
-            time_error_term=time_error_term,
+            success_reward=success_reward,
+            wrong_cost=wrong_cost,
+            missed_cost=missed_cost,
+            time_accuracy_reward=time_accuracy_reward,
             
-            proximity_term=proximity_term,
-            progress_term=progress_term,
+            proximity_cost=proximity_cost,
+            progress_reward=progress_reward,
+
+            upward_reward=upward_reward,
+            downward_reward=downward_reward,
 
             action_l2=action_l2,
             joint_vel_l2=joint_vel_l2,
             limit_pen=limit_pen,
-            tip_limit=tip_limit,
+            tip_limit_pen=tip_limit_pen,
+            under_drum_pen=under_drum_pen,
 
             w_success=self.cfg.w_success,
             w_wrong=self.cfg.w_wrong,
             w_miss=self.cfg.w_miss,
-            w_time_error=self.cfg.w_time_error,
+            w_time_accuracy=self.cfg.w_time_accuracy,
 
             w_progress=self.cfg.w_progress,
             w_proximity=self.cfg.w_proximity,
+
+            w_upward=self.cfg.w_upward,
+            w_downward=self.cfg.w_downward,
             
             w_action=self.cfg.w_action,
             w_joint_vel=self.cfg.w_joint_vel,
             w_limit=self.cfg.w_limit,
             w_tip_limit=self.cfg.w_tip_limit,
+            w_under_drum=self.cfg.w_under_drum,
         )
+
+        num_hit_inst = self.success.float() + self.missed_target.float()
+
+        num_hit = num_hit_inst.float().sum(dim=-1)
+        num_success = self.success.float().sum(dim=-1)
+        num_wrong = self.wrong_hit.float().sum(dim=-1)
+        num_missed = self.missed_target.float().sum(dim=-1)
 
         # 로그 출력
         terms = {
             "reward": reward,
-            "proximity_term": proximity_term,
-            "progress": progress_term,
+            "proximity": proximity_cost,
+            "progress(x100)": progress_reward * 100,
+            "upward": upward_reward,
+            "downward": downward_reward,
             "action_l2": action_l2,
             "joint_vel_l2": joint_vel_l2,
-            "limit_pen": limit_pen,
-            "tip_limit": tip_limit,
+            "limit_pen(x100)": limit_pen * 100,
+            "tip_limit_pen": tip_limit_pen,
+            "under_drum_pen": under_drum_pen,
         }
         self.logger.add(terms)
 
-        num_hit = goal_success + goal_wrong + goal_missed
-        num_hit_inst = self.success.float() + self.wrong_hit.float() + self.missed_target.float()
-        
         p_terms = {
-            "success_rate": torch.stack([goal_success, num_hit], dim=-1),
-            "wrong_rate": torch.stack([goal_wrong, num_hit], dim=-1),
-            "miss_rate": torch.stack([goal_missed, num_hit], dim=-1),
+            "success_rate": torch.stack([num_success, num_hit], dim=-1),
+            "wrong_rate": torch.stack([num_wrong, num_hit], dim=-1),
+            "miss_rate": torch.stack([num_missed, num_hit], dim=-1),
 
             "snare_success_rate": torch.stack([self.success[:, 0], num_hit_inst[:, 0]], dim=-1),
-            # "snare_wrong_rate": torch.stack([self.wrong_hit[:, 0], num_hit_inst[:, 0]], dim=-1),
-            # "snare_miss_rate": torch.stack([self.missed_target[:, 0], num_hit_inst[:, 0]], dim=-1),
+            "snare_wrong_rate": torch.stack([self.wrong_hit[:, 0], num_hit_inst[:, 0]], dim=-1),
+            "snare_miss_rate": torch.stack([self.missed_target[:, 0], num_hit_inst[:, 0]], dim=-1),
 
             "floor_success_rate": torch.stack([self.success[:, 1], num_hit_inst[:, 1]], dim=-1),
-            # "floor_wrong_rate": torch.stack([self.wrong_hit[:, 1], num_hit_inst[:, 1]], dim=-1),
-            # "floor_miss_rate": torch.stack([self.missed_target[:, 1], num_hit_inst[:, 1]], dim=-1),
+            "floor_wrong_rate": torch.stack([self.wrong_hit[:, 1], num_hit_inst[:, 1]], dim=-1),
+            "floor_miss_rate": torch.stack([self.missed_target[:, 1], num_hit_inst[:, 1]], dim=-1),
 
             "mid_success_rate": torch.stack([self.success[:, 2], num_hit_inst[:, 2]], dim=-1),
-            # "mid_wrong_rate": torch.stack([self.wrong_hit[:, 2], num_hit_inst[:, 2]], dim=-1),
-            # "mid_miss_rate": torch.stack([self.missed_target[:, 2], num_hit_inst[:, 2]], dim=-1),
+            "mid_wrong_rate": torch.stack([self.wrong_hit[:, 2], num_hit_inst[:, 2]], dim=-1),
+            "mid_miss_rate": torch.stack([self.missed_target[:, 2], num_hit_inst[:, 2]], dim=-1),
 
             "high_success_rate": torch.stack([self.success[:, 3], num_hit_inst[:, 3]], dim=-1),
-            # "high_wrong_rate": torch.stack([self.wrong_hit[:, 3], num_hit_inst[:, 3]], dim=-1),
-            # "high_miss_rate": torch.stack([self.missed_target[:, 3], num_hit_inst[:, 3]], dim=-1),
+            "high_wrong_rate": torch.stack([self.wrong_hit[:, 3], num_hit_inst[:, 3]], dim=-1),
+            "high_miss_rate": torch.stack([self.missed_target[:, 3], num_hit_inst[:, 3]], dim=-1),
 
             "hihat_success_rate": torch.stack([self.success[:, 4], num_hit_inst[:, 4]], dim=-1),
-            # "hihat_wrong_rate": torch.stack([self.wrong_hit[:, 4], num_hit_inst[:, 4]], dim=-1),
-            # "hihat_miss_rate": torch.stack([self.missed_target[:, 4], num_hit_inst[:, 4]], dim=-1),
+            "hihat_wrong_rate": torch.stack([self.wrong_hit[:, 4], num_hit_inst[:, 4]], dim=-1),
+            "hihat_miss_rate": torch.stack([self.missed_target[:, 4], num_hit_inst[:, 4]], dim=-1),
 
             "ride_success_rate": torch.stack([self.success[:, 5], num_hit_inst[:, 5]], dim=-1),
-            # "ride_wrong_rate": torch.stack([self.wrong_hit[:, 5], num_hit_inst[:, 5]], dim=-1),
-            # "ride_miss_rate": torch.stack([self.missed_target[:, 5], num_hit_inst[:, 5]], dim=-1),
+            "ride_wrong_rate": torch.stack([self.wrong_hit[:, 5], num_hit_inst[:, 5]], dim=-1),
+            "ride_miss_rate": torch.stack([self.missed_target[:, 5], num_hit_inst[:, 5]], dim=-1),
 
-            "crash_success_rate": torch.stack([self.success[:, 7], num_hit_inst[:, 7]], dim=-1),
-            # "crash_wrong_rate": torch.stack([self.wrong_hit[:, 7], num_hit_inst[:, 7]], dim=-1),
-            # "crash_miss_rate": torch.stack([self.missed_target[:, 7], num_hit_inst[:, 7]], dim=-1),
+            "crash1_success_rate": torch.stack([self.success[:, 6], num_hit_inst[:, 6]], dim=-1),
+            "crash1_wrong_rate": torch.stack([self.wrong_hit[:, 6], num_hit_inst[:, 6]], dim=-1),
+            "crash1_miss_rate": torch.stack([self.missed_target[:, 6], num_hit_inst[:, 6]], dim=-1),
+
+            "crash2_success_rate": torch.stack([self.success[:, 7], num_hit_inst[:, 7]], dim=-1),
+            "crash2_wrong_rate": torch.stack([self.wrong_hit[:, 7], num_hit_inst[:, 7]], dim=-1),
+            "crash2_miss_rate": torch.stack([self.missed_target[:, 7], num_hit_inst[:, 7]], dim=-1),
         }
         self.logger.add_probability(p_terms)
         self.logger.maybe_flush()
+
+        if torch.isnan(reward).any():
+            raise RuntimeError("NaN reward")
 
         return reward
     
@@ -317,25 +397,30 @@ class DrumRobotEnv(DirectRLEnv):
         super()._reset_idx(env_ids)             # type: ignore[arg-type]
 
         # 드럼 위치 리셋 (perturbation)
-        inst_pos = self.basic_inst_pos.unsqueeze(0).repeat(len(env_ids), 1, 1)
+        inst_pos = self.basic_inst_pos.unsqueeze(0).repeat(len(env_ids), 1, 1)  # type: ignore[arg-type]
         inst_pos = inst_pos + self.cfg.inst_noise_scale * torch.randn_like(inst_pos)
         inst_pos[:, :, 2] = inst_pos[:, :, 2] + self.cfg.robot_waist_joint_offset_z
         self.inst_pos[env_ids] = inst_pos
 
-        if self.cfg.enable_visualization:
-            self._translate_drum(self.inst_pos)
-
         # RDS 리셋
-        robotic_drum_score = self.rds_generator.reset_target(env_ids)
+        robotic_drum_score = self.rds_initializer.reset_target(env_ids=env_ids, score_ratio=0.0, selection_strength=0.0)  # 랜덤으로 RDS 생성해서 사용
         self.rds[env_ids] = robotic_drum_score
         self.rds_visit[env_ids] = False
 
         # 로봇 자세 리셋
-        joint_pos, joint_vel = self._reset_init_pos(env_ids)
+        default_joint_pos = self.robot.data.default_joint_pos[env_ids]  # 기본 자세 가져오기
+        default_joint_vel = self.robot.data.default_joint_vel[env_ids]
+
+        joint_pos = self._get_init_joint_pos(env_ids, default_joint_pos)
+        joint_vel = torch.zeros_like(default_joint_vel)
+        
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # 텐서 변수들 리셋
         self._reset_tensors(env_ids)
+
+        # 시각화
+        self.visualizer.reset(self.inst_pos)
         
     # ============================================================
     # [Custom Functions]
@@ -349,7 +434,7 @@ class DrumRobotEnv(DirectRLEnv):
             low=-1.0, high=1.0, shape=(9,), dtype=np.float32
         )
         self.observation_space = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=(288,), dtype=np.float32
+            low=-np.inf, high=np.inf, shape=(94,), dtype=np.float32
         )
 
         # print("[DEBUG] action_space:", self.action_space)
@@ -385,23 +470,25 @@ class DrumRobotEnv(DirectRLEnv):
         # print("[DEBUG] find_joints names: ", self.ctrl_joint_names)
 
     def _bind_body_ids(self):
+        # print("[DEBUG] body_names: ", self.robot.data.body_names)
+
         # 양손 스틱 링크의 인덱스
-        left = self.robot.find_bodies("left_wrist")     # ([10], ['left_wrist'])
-        right = self.robot.find_bodies("right_wrist")   # ([11], ['right_wrist'])
-        if len(left) == 0 or len(right) == 0:
-            raise RuntimeError("wrist body not found. Check USD body names.")
-        self.left_stick_idx = left[0]
-        self.right_stick_idx = right[0]
+        self.left_stick_idx = self._get_body_idx("left_wrist")  # 10
+        self.right_stick_idx = self._get_body_idx("right_wrist")  # 11
 
         # 양손 하완 링크의 인덱스
-        left = self.robot.find_bodies("left_elbow")     # ([07], ['left_elbow'])
-        right = self.robot.find_bodies("right_elbow")   # ([08], ['right_elbow'])
-        if len(left) == 0 or len(right) == 0:
-            raise RuntimeError("wrist body not found. Check USD body names.")
-        self.left_arm_idx = left[0]
-        self.right_arm_idx = right[0]
+        self.left_arm_idx = self._get_body_idx("left_elbow")  # 07
+        self.right_arm_idx = self._get_body_idx("right_elbow")  # 08
 
-        # print("[DEBUG] body_names: ", self.robot.data.body_names)
+    def _get_body_idx(self, body_name) -> int:
+        ids, _ = self.robot.find_bodies(body_name) # ([id], ['body name'])
+        
+        if len(ids) == 0:
+            raise RuntimeError("wrist body not found. Check USD body names.")
+        
+        idx = ids[0] # int 값만 저장
+
+        return idx
 
     def _load_config(self):
         # dt
@@ -409,6 +496,9 @@ class DrumRobotEnv(DirectRLEnv):
 
         # episode length (step)
         self.episode_length = int(self.cfg.episode_length_s / self.dt)
+
+        # lookahead step
+        self.max_lookahead_step = int(self.cfg.max_lookahead_time / self.dt)
 
         # offset wrist link to tip
         L_off = torch.tensor(self.cfg.tip_offset_left, device=self.device, dtype=torch.float32)  # (3,)
@@ -419,8 +509,6 @@ class DrumRobotEnv(DirectRLEnv):
 
         self._build_joint_tensors()
         self._build_drum_tensors()
-
-        self.idle_tip_pos = torch.tensor(self.cfg.idle_tip_pos, device=self.device).unsqueeze(0)
 
     def _build_joint_tensors(self):
 
@@ -449,19 +537,6 @@ class DrumRobotEnv(DirectRLEnv):
         # print("[DEBUG] self.joint_low: ", self.joint_low)
         # print("[DEBUG] self.joint_high: ", self.joint_high)
 
-        # 초기 위치값
-        self.init_joint_min = torch.tensor(
-            [self.cfg.init_joint_range[name][0] for name in self.ctrl_joint_names],
-            device=self.device,
-            dtype=torch.float32
-        ).unsqueeze(0)
-
-        self.init_joint_max = torch.tensor(
-            [self.cfg.init_joint_range[name][1] for name in self.ctrl_joint_names],
-            device=self.device,
-            dtype=torch.float32
-        ).unsqueeze(0)
-
     def _build_drum_tensors(self):
         self.inst_names = list(self.cfg.instruments.keys())
         self.basic_inst_pos = torch.tensor(
@@ -476,7 +551,6 @@ class DrumRobotEnv(DirectRLEnv):
         N = self.num_envs
         T = self.episode_length
         M = self.num_drum
-        L = self.cfg.rds_observation_length
 
         # 로봇의 tip 위치를 저장할 텐서
         self.tip_pos = torch.zeros((N, 2, 3), device=self.device)
@@ -491,15 +565,20 @@ class DrumRobotEnv(DirectRLEnv):
         self.inst_pos = inst_pos
 
         # 타격 상태 버퍼
-        self.hit_armed = torch.zeros((N, 2, M), device=self.device, dtype=torch.bool)
-        
+        self.hit_armed = torch.ones((N, 2, M), device=self.device, dtype=torch.bool)
+        self.hit_armed_for_reward = torch.ones((N, 2, M), device=self.device, dtype=torch.bool) # 보상 계산용
+
         # 목표 악보을 저장할 텐서
         self.rds = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
-        self.rds_window = torch.zeros((N, L, M), device=self.device, dtype=torch.int64)
         self.rds_visit = torch.zeros((N, T, M), device=self.device, dtype=torch.bool)
 
         # step
         self.steps = torch.zeros((N,), device=self.device, dtype=torch.int64)
+
+        # 악기별 보상 가중치
+        self.w_inst_success = torch.ones((1, M), device=self.device)
+        self.n_success = torch.zeros((1, M), device=self.device)
+        self.n_hit = torch.zeros((1, M), device=self.device)
 
     def _init_obs_norm_stats(self):
         # joint
@@ -526,41 +605,90 @@ class DrumRobotEnv(DirectRLEnv):
         return self.dir_tensor * robot_data
 
     """ func (_get_observations) """
-    def get_rds_window(self, rds, step):
-        # rds: (N, T, M)
-        # step: (N,)
-        L = self.cfg.rds_observation_length
-        M = self.num_drum
-        T = self.episode_length
+    def _get_next_hits(self, rds, step):
+        """
+        현재 step 이후 max_lookahead_step 안에 있는 다음 K개 타격 이벤트를 반환.
 
-        # (N, L) step index 만들기
-        offset = torch.arange(L, device=self.device).unsqueeze(0)    # (1, L), [0 L-1]
-        idx = step.unsqueeze(1) + offset                                # (N, L)
+        Args:
+            rds:  (N, T, M)  # RDS, time x drum multi-hot
+            step: (N,)       # 현재 step
 
-        # 범위 체크
-        valid = (idx >= 0) & (idx < T)
+        Returns:
+            next_hits_obs: (N, K, M + 2)
+                [:, :, :M]     = target drum multi-hot
+                [:, :, M]      = normalized time_to_hit, 0.0 ~ 1.0
+                [:, :, M + 1]  = valid flag, 1이면 유효 이벤트, 0이면 없음
+        """
+        N, T, M = rds.shape
+        L = self.max_lookahead_step
+        K = self.cfg.num_hits
 
-        # 안전하게 index clamp
+        # 현재 step부터 L step 이후까지의 index 생성
+        offsets = torch.arange(L, device=self.device, dtype=torch.long)  # (L,) # offset=0을 포함
+        idx = step.unsqueeze(1) + offsets.unsqueeze(0)              # (N, L)
+
+        valid_time = (idx >= 0) & (idx < T)                         # (N, L)
         idx_clamped = idx.clamp(0, T - 1)
 
-        # gather로 (N, L, M) 만들기
-        out = rds.gather(1, idx_clamped.unsqueeze(-1).expand(-1, -1, M))
+        # 미래 RDS window 추출
+        future_rds = rds.gather(
+            dim=1,
+            index=idx_clamped.unsqueeze(-1).expand(-1, -1, M)
+        )   # (N, L, M)
 
-        # invalid 위치는 0으로
-        out[~valid] = 0
-        return out
+        # T 범위 밖은 0 처리
+        future_rds = future_rds * valid_time.unsqueeze(-1).to(future_rds.dtype)
+
+        # 해당 timestep에 하나 이상의 드럼 hit가 있으면 event
+        event_mask = future_rds.sum(dim=-1) > 0  # (N, L)
+
+        # 각 env별 event 순서 번호
+        # event가 아닌 위치도 값은 생기지만 event_mask로 다시 걸러냄
+        event_order = torch.cumsum(event_mask.to(torch.long), dim=1) - 1    # (N, L)  # torch.cumsum: dim 방향으로 누적 합
+
+        # K개까지만 선택
+        selected = event_mask & (event_order >= 0) & (event_order < K)  # (N, L)
+
+        # 출력 버퍼 생성
+        next_targets = torch.zeros((N, K, M), device=self.device, dtype=torch.float32)
+        next_times = torch.ones((N, K, 1), device=self.device, dtype=torch.float32)
+        next_valid = torch.zeros((N, K, 1), device=self.device, dtype=torch.float32)
+
+        if selected.any():
+            env_idx, time_idx = torch.where(selected)      # 선택된 event 위치  # (num_selected,)
+            hit_idx = event_order[env_idx, time_idx]       # 몇 번째 hit인지, 0 ~ K-1
+
+            # target multi-hot
+            next_targets[env_idx, hit_idx] = future_rds[env_idx, time_idx].to(torch.float32)
+
+            # normalized time_to_hit
+            # offset 0이면 지금, offset L이면 horizon 끝
+            time_norm = offsets[time_idx].to(torch.float32) / float(L - 1)
+            time_norm = torch.clamp(time_norm, 0.0, 1.0)
+
+            next_times[env_idx, hit_idx, 0] = time_norm
+            next_valid[env_idx, hit_idx, 0] = 1.0
+
+        next_hits = torch.cat(
+            [next_targets, next_times, next_valid],
+            dim=-1
+        )   # (N, K, M+2)
+
+        return next_hits
 
     def _normalize_and_pack_obs(self,
             joint_pos,
             joint_vel,
             tip_pos,
             inst_pos,
-            rds_onehot,
+            next_hits,
+            hit_armed,
             ) -> torch.Tensor:
         # joint_pos, joint_vel: (N, 9)
         # tip_pos: (N, 2, 3)
-        # inst_pos: (N, 8, 3)
-        # rds_onehot: (N, 8, 30)
+        # inst_pos: (N, M, 3)
+        # next_hits: (N, K, M+2)
+        # hit_armed: (N, 2, M)
 
         # normalize
         joint_pos_n = (joint_pos - self.joint_center) / self.joint_half_range
@@ -581,7 +709,8 @@ class DrumRobotEnv(DirectRLEnv):
                 joint_vel_n,
                 tip_pos_n.reshape(self.num_envs, 6),
                 inst_pos_n.reshape(self.num_envs, 24),
-                rds_onehot.reshape(self.num_envs, 240),
+                next_hits.reshape(self.num_envs, 30),
+                hit_armed.reshape(self.num_envs, 16),
             ],
             dim=-1
         )
@@ -594,10 +723,10 @@ class DrumRobotEnv(DirectRLEnv):
         all_body_pos = self.robot.data.body_pos_w      # (num_envs, num_bodies, 3)
         all_body_quat = self.robot.data.body_quat_w    # (num_envs, num_bodies, 4)  (w,x,y,z)인 경우가 많음
 
-        L_wrist_pos = all_body_pos[:, self.left_stick_idx, :].squeeze(1)       # (num_envs, 1, 3) -> (num_envs, 3) 1인 차원을 제거
-        R_wrist_pos = all_body_pos[:, self.right_stick_idx, :].squeeze(1)
-        L_quat = all_body_quat[:, self.left_stick_idx, :].squeeze(1)     # (num_envs, 1, 4) -> (num_envs, 4)
-        R_quat = all_body_quat[:, self.right_stick_idx, :].squeeze(1)
+        L_wrist_pos = all_body_pos[:, self.left_stick_idx]      # (num_envs, 3)
+        R_wrist_pos = all_body_pos[:, self.right_stick_idx]
+        L_quat = all_body_quat[:, self.left_stick_idx]
+        R_quat = all_body_quat[:, self.right_stick_idx]
 
         # 팁 위치 구하기
         L_tip_w = L_wrist_pos + math_utils.quat_apply(L_quat, self.tip_offset_L)
@@ -607,7 +736,7 @@ class DrumRobotEnv(DirectRLEnv):
         L_tip = L_tip_w - self.scene.env_origins
         R_tip = R_tip_w - self.scene.env_origins
 
-        tip_pos = torch.cat([L_tip, R_tip], dim=-1).reshape(-1, 2, 3)   # (num_envs, 6) -> (num_envs, 2, 3)
+        tip_pos = torch.stack([L_tip, R_tip], dim=1)   # (num_envs, 2, 3)
 
         return tip_pos
     
@@ -637,7 +766,7 @@ class DrumRobotEnv(DirectRLEnv):
         in_xy_range = dist_xy_sq <= radius_sq   # (N, 2, M)
 
         # z 높이 확인
-        in_z_range = torch.abs(diff_z) <= self.cfg.drum_z_margin    # (N, 2, M)
+        in_z_range = (diff_z <= self.cfg.drum_z_range) & (diff_z >= 0.0)    # (N, 2, M)
 
         contact_mask = in_xy_range & in_z_range
 
@@ -698,21 +827,21 @@ class DrumRobotEnv(DirectRLEnv):
 
         # 윈도우 왼쪽 끝 스텝
         window_end_step = steps - W
-        vaild = (window_end_step >= 0) & (window_end_step < T)
+        valid = (window_end_step >= 0) & (window_end_step < T)
         window_end_step = window_end_step.clamp(0, T - 1)
 
         target_mask = (rds[self.env_arange, window_end_step, :] > 0.5)
-        target_mask &= vaild.unsqueeze(-1)     # (N, M)
+        target_mask &= valid.unsqueeze(-1)     # (N, M)
 
         offsets = self._get_hit_window_offsets(W)
         for offset in offsets:
             cand_steps = window_end_step + offset
-            vaild = (cand_steps >= 0) & (cand_steps < T)
+            valid = (cand_steps >= 0) & (cand_steps < T)
             cand_steps_clamped = cand_steps.clamp(0, T - 1)
 
             hit_mask = rds_visit[self.env_arange, cand_steps_clamped, :] > 0.5  # (N, M)
 
-            match_mask = hit_mask & vaild.unsqueeze(-1) & target_mask & (~success)
+            match_mask = hit_mask & valid.unsqueeze(-1) & target_mask & (~success)
             success |= match_mask
 
             time_error[match_mask] = abs(offset)  # step 차이
@@ -730,34 +859,38 @@ class DrumRobotEnv(DirectRLEnv):
         return offsets
 
     def _check_rearm(self, hit_armed, hit_per_arm, contact_mask, diff_z):
-        rearm_mask = (~contact_mask) & (diff_z > self.cfg.rearm_height)
+        """
+        준비
 
+        Args:
+            hit_armed:  (N, 2, M)   # 이전 준비 상태
+            contact_mask: (N, 2, M) # 접촉 여부
+            diff_z: (N, 2, M)       # z 거리
+
+        Returns:
+            next_hit_armed: (N, 2, M)
+        """
         next_hit_armed = hit_armed.clone()
 
-        # hit 나면 disarm
-        next_hit_armed[hit_per_arm] = False
-
         # 충분히 벗어나고 올라가면 rearm
+        rearm_mask = diff_z > self.cfg.rearm_height
         next_hit_armed[rearm_mask] = True
+
+        # 접촉 중이면 disarm
+        contact_expanded = contact_mask.any(dim=2, keepdim=True)  # (N,2,1)
+        next_hit_armed = next_hit_armed.masked_fill(contact_expanded, False)
 
         return next_hit_armed
 
     """ func (_reset_idx) """
-    def _reset_init_pos(self, env_ids):
-        # 랜덤 각도 초기 위치
-        rand = torch.rand((len(env_ids), len(self.ctrl_joint_names)), device=self.device)   # (N,9)
-        init_pos = self.init_joint_min + rand * (self.init_joint_max - self.init_joint_min)
-        usd_init_pos = self._convert_robot_to_usd(init_pos)
-
-        # 기본 자세 가져오기
-        default_joint_pos = self.robot.data.default_joint_pos[env_ids]
-        default_joint_vel = self.robot.data.default_joint_vel[env_ids]
-
+    def _get_init_joint_pos(self, env_ids, default_joint_pos):
         joint_pos = default_joint_pos.clone()
-        joint_pos[:,self.ctrl_joint_ids] = usd_init_pos
-        joint_vel = torch.zeros_like(default_joint_vel)
 
-        return joint_pos, joint_vel
+        init_pos = self.robot_initializer.reset_init_pos(env_ids)
+        usd_init_pos = self._convert_robot_to_usd(init_pos)
+        joint_pos[:,self.ctrl_joint_ids] = usd_init_pos
+
+        return joint_pos
 
     def _reset_tensors(self, env_ids):
         # 팁 위치/속도 리셋
@@ -772,318 +905,135 @@ class DrumRobotEnv(DirectRLEnv):
         # 스텝 리셋
         self.steps[env_ids] = 0 # torch.randint(0, 9, (len(env_ids),), device=self.device)
 
-    # ============================================================
-    # [Debug / Visualization]
-    # Not used for training logic
-    # ============================================================
-
-    def _init_visualization(self):
-        self._init_tip()
-        self._init_drum()
-
-    def _create_sphere(self, node_name, radius, color):
-        # 고속 업데이트를 위한 오퍼레이터 캐시
-        translate_ops = []
-        color_ops = []
-
-        # sphere 설정
-        sphere_cfg = sim_utils.SphereCfg(
-            radius=radius,
-        )
-
-        # 현재 IsaacSim의 USD Stage 접근
-        stage = omni.usd.get_context().get_stage()
-
-        for i in range(self.num_envs):
-
-            # USD Stage 위에 Prim을 생성 (이미 존재하면 타입을 유지한 채 반환)
-            viz_root = f"/World/envs/env_{i}/_viz"
-            stage.DefinePrim(viz_root, "Xform")     # Xform = Transform 노드
-
-            xform_path = f"{viz_root}/{node_name}"
-            stage.DefinePrim(xform_path, "Xform")
-
-            sphere_path = f"{xform_path}/sphere"
-            # IsValid 체크 후 sphere prim 생성
-            if not stage.GetPrimAtPath(sphere_path).IsValid():
-                sphere_cfg.func(sphere_path, sphere_cfg)
-
-            # TranslateOp를 1회 생성하고 캐싱
-            prim = stage.GetPrimAtPath(xform_path)
-            xf = UsdGeom.Xformable(prim)    # prim이 transform 연산을 가질 수 있도록 감싸는 wrapper
-            ops = xf.GetOrderedXformOps()   # 현재 들어있는 transform 연산 목록 가져오기
-            if len(ops) > 0 and ops[0].GetOpType() == UsdGeom.XformOp.TypeTranslate:    # 첫 번째 연산이 TranslateOp
-                t_op = ops[0]
-            else:
-                # Clear 후 TranslateOp 추가
-                xf.ClearXformOpOrder()
-                t_op = xf.AddTranslateOp()
-
-            translate_ops.append(t_op)
-
-            # 색상 설정
-            sphere_prim = stage.GetPrimAtPath(sphere_path)
-            gprim = UsdGeom.Gprim(sphere_prim)
-            pv = gprim.GetDisplayColorPrimvar()
-            if not pv:
-                pv = gprim.CreateDisplayColorPrimvar()
-            pv.Set([color])
-
-            # 색 Primvar 캐싱
-            color_ops.append(pv)
-
-        return translate_ops, color_ops
-
-    def _create_cylinder(self, node_name, radius, height, color):
-        # 고속 업데이트를 위한 오퍼레이터 캐시
-        translate_ops = []
-        color_ops = []
-
-        # 현재 IsaacSim의 USD Stage 접근
-        stage = omni.usd.get_context().get_stage()
-
-        for i in range(self.num_envs):
-
-            # USD Stage 위에 Prim을 생성 (이미 존재하면 타입을 유지한 채 반환)
-            viz_root = f"/World/envs/env_{i}/_viz"
-            stage.DefinePrim(viz_root, "Xform")     # Xform = Transform 노드
-
-            xform_path = f"{viz_root}/{node_name}"
-            stage.DefinePrim(xform_path, "Xform")
-
-            cylinder_path = f"{xform_path}/cylinder"
-            # IsValid 체크 후 cylinder prim 생성
-            if not stage.GetPrimAtPath(cylinder_path).IsValid():
-                stage.DefinePrim(cylinder_path, "Cylinder")
-                cyl = UsdGeom.Cylinder(stage.GetPrimAtPath(cylinder_path))
-                cyl.CreateRadiusAttr().Set(radius)
-                cyl.CreateHeightAttr().Set(height)
-
-            # TranslateOp를 1회 생성하고 캐싱
-            prim = stage.GetPrimAtPath(xform_path)
-            xf = UsdGeom.Xformable(prim)    # prim이 transform 연산을 가질 수 있도록 감싸는 wrapper
-            ops = xf.GetOrderedXformOps()   # 현재 들어있는 transform 연산 목록 가져오기
-            if len(ops) > 0 and ops[0].GetOpType() == UsdGeom.XformOp.TypeTranslate:    # 첫 번째 연산이 TranslateOp
-                t_op = ops[0]
-            else:
-                # Clear 후 TranslateOp 추가
-                xf.ClearXformOpOrder()
-                t_op = xf.AddTranslateOp()
-
-            translate_ops.append(t_op)
-
-            # 색상 설정
-            cylinder_prim = stage.GetPrimAtPath(cylinder_path)
-            gprim = UsdGeom.Gprim(cylinder_prim)
-            pv = gprim.GetDisplayColorPrimvar()
-            if not pv:
-                pv = gprim.CreateDisplayColorPrimvar()
-            pv.Set([color])
-
-            # 색 Primvar 캐싱
-            color_ops.append(pv)
-
-        return translate_ops, color_ops
-
-    def _translate(self, t_op, pos):
-        n = len(pos[:,0])
-
-        for i in range(n):
-            p = pos[i]
-            t_op[i].Set(
-                Gf.Vec3f(float(p[0]), float(p[1]), float(p[2]))
-            )
-
-    def _color(self, c_op, env_ids, color):
-        env_ids = env_ids.tolist()
-
-        for id in env_ids:
-            c_op[id].Set([color])
-
-    def _init_tip(self):
-        color_L = Gf.Vec3f(
-            float(self.cfg.color_L[0]),
-            float(self.cfg.color_L[1]),
-            float(self.cfg.color_L[2])
-        )
-        t_op, c_op = self._create_sphere(
-            node_name="TipMarkerL",
-            radius=self.cfg.tip_marker_radius,
-            color=color_L
-        )
-        self.tip_translate_ops_L = t_op
-        self.tip_color_ops_L = c_op
-
-        color_R = Gf.Vec3f(
-            float(self.cfg.color_R[0]),
-            float(self.cfg.color_R[1]),
-            float(self.cfg.color_R[2])
-        )
-        t_op, c_op  = self._create_sphere(
-            node_name="TipMarkerR",
-            radius=self.cfg.tip_marker_radius,
-            color=color_R
-        )
-        self.tip_translate_ops_R = t_op
-        self.tip_color_ops_R = c_op
-
-    def _translate_tip(self, tip_pos):
-        self._translate(self.tip_translate_ops_L, tip_pos[:, 0, :])
-        self._translate(self.tip_translate_ops_R, tip_pos[:, 1, :])
-
-    def _init_drum(self):
-        # 고속 업데이트를 위한 TranslateOp 캐시
-        self._drum_translate_ops = []
-
-        # 고속 업데이트를 위한 색 Primvar 캐시
-        self._drum_color_ops = []
-
-        inst_names = list(self.cfg.instruments.keys())
-        self.base_color = Gf.Vec3f(0.5, 0.5, 0.5)
-
-        for _, name in enumerate(inst_names):
-            t_op, c_op = self._create_cylinder(
-                node_name=name,
-                radius=self.cfg.drum_radius,
-                height=self.cfg.drum_height,
-                color=self.base_color,
-            )
-
-            self._drum_translate_ops.append(t_op)
-            self._drum_color_ops.append(c_op)
-
-    def _translate_drum(self, inst_pos):
-        for i in range(self.num_drum):
-            p = inst_pos[:, i, :]
-            self._translate(self._drum_translate_ops[i], p)
-
-    def _update_drum_color(self, rds_window, hit_mask):
-        _, L, M = rds_window.shape
-        
-        far_color  = Gf.Vec3f(1.0, 1.0, 0.0)   # 노랑 (Yellow)
-        near_color = Gf.Vec3f(1.0, 0.0, 0.0)   # 빨강 (Red)
-
-        for i in range(M):
-
-            far_mask  = (rds_window[:, 3:L, i] > 0.5).any(dim=1)
-            near_mask = (rds_window[:, 0:3, i] > 0.5).any(dim=1)
-
-            # 우선순위: near > mid > far
-            near_ids = torch.where(near_mask)[0]
-            far_ids  = torch.where(~near_mask & far_mask)[0]
-            none_ids = torch.where(~far_mask & ~near_mask)[0]
-
-            self._color(self._drum_color_ops[i], none_ids, self.base_color)
-            self._color(self._drum_color_ops[i], far_ids, far_color)
-            self._color(self._drum_color_ops[i], near_ids, near_color)
-
-            # hit_inst_mask = hit_mask[:, i]
-            # hit_ids = torch.where(hit_inst_mask)[0]
-            # self._color(self._drum_color_ops[i], hit_ids, near_color)
-
 """ helper 함수 """
 @torch.jit.script
-def nearest_target_mask_from_window(rds_window: torch.Tensor) -> torch.Tensor:
-    # rds_window: (N, L, M)
-    # return:     (N, M)  가장 가까운 미래 nonzero target step의 one-hot
-    N, L, M = rds_window.shape
-    device = rds_window.device
-
-    has_target_each_step = (rds_window > 0.5).any(dim=2)  # (N, L)
-
-    # target이 있는 첫 step 찾기
-    first_idx = torch.argmax(has_target_each_step.to(torch.int64), dim=1)  # (N,)
-
-    # argmax는 전부 False여도 0을 반환하므로 (최대값이 0) 별도 마스크 필요
-    any_target = has_target_each_step.any(dim=1)  # (N,)
-
-    idx = first_idx.clamp(0, L - 1)
-    nearest_mask = rds_window[torch.arange(N, device=device), idx, :] > 0.5  # (N, M)
-
-    # window 안에 target이 없으면 zero mask
-    nearest_mask = nearest_mask & any_target.unsqueeze(1)
-
-    return nearest_mask
-
-@torch.jit.script
-def assignment_cost_for_targets(
+def assignment_reward_for_targets(
         target_mask: torch.Tensor,  # (N, M)
         inst_pos: torch.Tensor,     # (N, M, 3)
         left_tip_pos: torch.Tensor, # (N, 3)
         right_tip_pos: torch.Tensor,# (N, 3)
-        idle_tip_pos: torch.Tensor, # (1, 3)
-) -> torch.Tensor:
+        tip_vel: torch.Tensor,      # (N, 2, 3)
+        hit_armed: torch.Tensor,    # (N, 2, M)
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     device = target_mask.device
     N, M = target_mask.shape
-
-    # XYZ 거리
-    diff_l = inst_pos[:, :, :] - left_tip_pos[:, None, :]    # (N, M, 3)
-    diff_r = inst_pos[:, :, :] - right_tip_pos[:, None, :]
-
-    dist_l = torch.sum(diff_l * diff_l, dim=-1)     # (N, M)
-    dist_r = torch.sum(diff_r * diff_r, dim=-1)
 
     # target index 추출 (최대 2개)
     masked_idx = torch.where(
         target_mask,
         torch.arange(M, device=device).expand(N, M),
-        M - 1  # 타겟이 없는 경우 잘못된 타겟이 들어가는 걸 방지하고자 인덱스 중 최대값 사용, 타겟이 하나인 경우는 상관 없음
+        -1,
     )
 
-    top2_idx = torch.topk(masked_idx, k=2, dim=1, largest=False).values  # (N, 2)
+    values, indices = torch.topk(masked_idx, k=2, dim=1, largest=True)  # (N, 2)   # 입력 받은 tensor의 상위 k개의 index와 value를 반환함.
+
+    idx0 = values[:, 0].unsqueeze(1)    # (N, 1)
+    idx0 = torch.where(idx0 >= 0, idx0, torch.zeros_like(idx0)) # 타겟이 없는 경우 인덱싱 오류 방지
+
+    idx1 = values[:, 1].unsqueeze(1)
+    idx1 = torch.where(idx1 >= 0, idx1, torch.zeros_like(idx1)) # 타겟이 2개가 아닌 경우 인덱싱 오류 방지
+
+    # --------------------
+
+    # XYZ 거리
+    diff_l = left_tip_pos[:, None, :] - inst_pos    # (N, M, 3)
+    diff_r = right_tip_pos[:, None, :] - inst_pos
+
+    dist_l = torch.sum(diff_l * diff_l, dim=-1)     # (N, M)
+    dist_r = torch.sum(diff_r * diff_r, dim=-1)
+
+    d_l0 = dist_l.gather(1, idx0).squeeze(1)   # (N,)  # gather(input, dim, index): 지정한 dim 축에서 index 위치의 값을 가져오기
+    d_r0 = dist_r.gather(1, idx0).squeeze(1)
+
+    d_l1 = dist_l.gather(1, idx1).squeeze(1)
+    d_r1 = dist_r.gather(1, idx1).squeeze(1)
+
+    # --------------------
+
+    down_vel_l = torch.clamp(-tip_vel[:, 0, 2], 0.0, 2.0)   # (N,)
+    down_vel_r = torch.clamp(-tip_vel[:, 1, 2], 0.0, 2.0)
+
+    up_vel_l = torch.clamp( tip_vel[:, 0, 2], 0.0, 2.0)     # (N,)
+    up_vel_r = torch.clamp( tip_vel[:, 1, 2], 0.0, 2.0)
+
+    hit_armed_l = hit_armed[:, 0, :]    # (N, M)
+    hit_armed_r = hit_armed[:, 1, :]
+
+    h_l0 = hit_armed_l.gather(1, idx0).squeeze(1)      # (N,)
+    h_r0 = hit_armed_r.gather(1, idx0).squeeze(1)
+
+    h_l1 = hit_armed_l.gather(1, idx1).squeeze(1)
+    h_r1 = hit_armed_r.gather(1, idx1).squeeze(1)
+
+    # --------------------
 
     target_count = target_mask.float().sum(dim=1)
     cost = torch.zeros(N, device=device)
-    
-    # --------------------
-    # case 1: 타겟 0개
-    # --------------------
-    idle_mask = (target_count == 0)
-
-    ilde_diff_l = idle_tip_pos - left_tip_pos   # (N, 3)
-    ilde_diff_r = idle_tip_pos - right_tip_pos
-    
-    ilde_dist_l = torch.sum(ilde_diff_l * ilde_diff_l, dim=-1)     # (N,)
-    ilde_dist_r = torch.sum(ilde_diff_r * ilde_diff_r, dim=-1)
-
-    idle_cost = 0.1 * ilde_dist_l + 0.1 * ilde_dist_r
-    cost = torch.where(idle_mask, idle_cost, cost)
+    upward_reward = torch.zeros(N, device=device)
+    downward_reward = torch.zeros(N, device=device)
 
     # --------------------
-    # case 2: 타겟 1개
+    # case 1: 타겟 1개
     # --------------------
     one_mask = (target_count == 1)
-
-    idx0 = top2_idx[:, 0]
-
-    d_l0 = dist_l.gather(1, idx0.unsqueeze(1)).squeeze(1)
-    d_r0 = dist_r.gather(1, idx0.unsqueeze(1)).squeeze(1)
 
     one_cost = torch.minimum(d_l0, d_r0)
     cost = torch.where(one_mask, one_cost, cost)
 
+    use_left = d_l0 <= d_r0
+
+    one_upward_reward = torch.where(
+        use_left,
+        (~h_l0).float() * up_vel_l,
+        (~h_r0).float() * up_vel_r,
+    )
+
+    one_downward_reward = torch.where(
+        use_left,
+        h_l0.float() * down_vel_l,
+        h_r0.float() * down_vel_r,
+    )
+
+    upward_reward = torch.where(one_mask, one_upward_reward, upward_reward)
+    downward_reward = torch.where(one_mask, one_downward_reward, downward_reward)
+
     # --------------------
-    # case 3: 타겟 2개
+    # case 2: 타겟 2개
     # --------------------
     two_mask = (target_count >= 2)
 
-    idx1 = top2_idx[:, 0]
-    idx2 = top2_idx[:, 1]
-
-    d_l1 = dist_l.gather(1, idx1.unsqueeze(1)).squeeze(1)
-    d_l2 = dist_l.gather(1, idx2.unsqueeze(1)).squeeze(1)
-
-    d_r1 = dist_r.gather(1, idx1.unsqueeze(1)).squeeze(1)
-    d_r2 = dist_r.gather(1, idx2.unsqueeze(1)).squeeze(1)
-
     # assignment 2가지
-    cost_case1 = d_l1 + d_r2
-    cost_case2 = d_l2 + d_r1
+    cost_case1 = (d_l0 + d_r1) / 2
+    cost_case2 = (d_l1 + d_r0) / 2
 
     two_cost = torch.minimum(cost_case1, cost_case2)
     cost = torch.where(two_mask, two_cost, cost)
 
-    return cost
+    use_case1 = cost_case1 <= cost_case2
+
+    two_upward_reward = torch.where(
+        use_case1,
+        (~h_l0).float() * up_vel_l + (~h_r1).float() * up_vel_r,
+        (~h_l1).float() * up_vel_l + (~h_r0).float() * up_vel_r,
+    ) / 2
+
+    two_downward_reward = torch.where(
+        use_case1,
+        h_l0.float() * down_vel_l + h_r1.float() * down_vel_r,
+        h_l1.float() * down_vel_l + h_r0.float() * down_vel_r,
+    ) / 2
+    
+    upward_reward = torch.where(two_mask, two_upward_reward, upward_reward)
+    downward_reward = torch.where(two_mask, two_downward_reward, downward_reward)
+    
+    # --------------------
+    # case 3: 타겟 0개
+    # --------------------
+    #
+    # 나중에 필요하면 작성
+    #
+
+    return cost, upward_reward, downward_reward
 
 @torch.jit.script
 def compute_reward_terms(
@@ -1098,7 +1048,10 @@ def compute_reward_terms(
     prev_left_tip_pos: torch.Tensor,
     prev_right_tip_pos: torch.Tensor,
     inst_pos: torch.Tensor,         # (N, M, 3) [m]
-    rds_window:torch.Tensor,        # (N, L, M)
+    next_hits:torch.Tensor,         # (N, K, M+2)
+
+    tip_vel:torch.Tensor,           # (N, 2, 3)
+    hit_armed:torch.Tensor,         # (N, 2, M)
 
     joint_vel: torch.Tensor,        # (N, num_joints) [rad/s]
     action: torch.Tensor,           # (N, 9) [-1,1]
@@ -1106,72 +1059,97 @@ def compute_reward_terms(
     joint_low: torch.Tensor,        # (1, 9) [rad]
     joint_high: torch.Tensor,       # (1, 9) [rad]
 
-    idle_tip_pos: torch.Tensor,     # (1, 3) [m]
+    w_inst_success: torch.Tensor,   # (1, M)
 
-    alpha: float,
+    k_accuracy: float,
+    k_time_to_hit: float,
     limit_margin: float,
 
     x_limit: float,
     y_limit_l: float,
     y_limit_h: float,
     z_limit: float,
+    drum_xy_margin: float,
+    drum_z_margin: float,
 ):
     # -------------------------------------------------
     # goal terms
     # -------------------------------------------------
-    goal_success = success.float().sum(dim=-1)        # (N,)
-    goal_wrong = wrong_hit.float().sum(dim=-1)        # (N,)
-    goal_missed = missed_target.float().sum(dim=-1)   # (N,)
+    success_reward = (
+        success.float() * w_inst_success           # (N, M)
+    ).sum(dim=-1)                                  # (N,)
+    # success_reward = success.float().sum(dim=-1)        # (N,)
+    wrong_cost = wrong_hit.float().sum(dim=-1)        # (N,)
+    missed_cost = missed_target.float().sum(dim=-1)   # (N,)
 
     valid_mask = time_error >= 0
-    time_error_term = torch.exp(-alpha * time_error)
-    time_error_term[~valid_mask] = 0
-    time_error_term = time_error_term.sum(dim=-1)
+    time_accuracy_reward = torch.exp(-k_accuracy * time_error)
+    time_accuracy_reward[~valid_mask] = 0
+    time_accuracy_reward = time_accuracy_reward.sum(dim=-1)
 
     # -------------------------------------------------
     # proximity terms: nearest imminent target only
     # -------------------------------------------------
-    nearest_target_mask = nearest_target_mask_from_window(rds_window)  # (N, M)
+    _, M, _ = inst_pos.shape
 
-    curr_cost = assignment_cost_for_targets(
+    nearest_target_mask = next_hits[:, 0, :M] > 0.5
+    first_time = next_hits[:, 0, M]
+
+    curr_cost, upward_reward, downward_reward = assignment_reward_for_targets(
         target_mask=nearest_target_mask,
         inst_pos=inst_pos,
         left_tip_pos=left_tip_pos,
         right_tip_pos=right_tip_pos,
-        idle_tip_pos=idle_tip_pos,
+        tip_vel=tip_vel,
+        hit_armed=hit_armed,
     )
 
-    prev_cost = assignment_cost_for_targets(
+    prev_cost, _, _ = assignment_reward_for_targets(
         target_mask=nearest_target_mask,
         inst_pos=inst_pos,
         left_tip_pos=prev_left_tip_pos,
         right_tip_pos=prev_right_tip_pos,
-        idle_tip_pos=idle_tip_pos,
+        tip_vel=tip_vel,
+        hit_armed=hit_armed,
     )
 
-    proximity_term = curr_cost
-    progress_term = prev_cost - curr_cost
+    proximity_cost = torch.exp(-k_time_to_hit * first_time) * curr_cost
+    progress_reward = prev_cost - curr_cost
 
-    # # -------------------------------------------------
-    # # proximity terms
-    # # -------------------------------------------------
-    # N, L, _ = rds_window.shape
-    # device = left_tip_pos.device
+    # -------------------------------------------------
+    # tip position penalties
+    # -------------------------------------------------
 
-    # proximity_term = torch.zeros((N,), device=device)
+    tip_limit_pen = (
+        (left_tip_pos[:, 0] > x_limit)
+        | (left_tip_pos[:, 0] < -x_limit)
+        | (left_tip_pos[:, 1] < y_limit_l)
+        | (left_tip_pos[:, 1] > y_limit_h)
+        | (left_tip_pos[:, 2] < z_limit)
 
-    # for i in range(L):
-    #     target_mask_i = rds_window[:, i, :] > 0.5    # (N, M)
+        | (right_tip_pos[:, 0] > x_limit)
+        | (right_tip_pos[:, 0] < -x_limit)
+        | (right_tip_pos[:, 1] < y_limit_l)
+        | (right_tip_pos[:, 1] > y_limit_h)
+        | (right_tip_pos[:, 2] < z_limit)
+    )
 
-    #     cost = assignment_cost_for_targets(
-    #         target_mask=target_mask_i,
-    #         inst_pos=inst_pos,
-    #         left_tip_pos=left_tip_pos,
-    #         right_tip_pos=right_tip_pos,
-    #     )
-    #     w = (L - i) / L
+    diff_xy_l = left_tip_pos[:, None, 0:2] - inst_pos[:, :, 0:2]    # (N, M, 2)
+    diff_xy_r = right_tip_pos[:, None, 0:2] - inst_pos[:, :, 0:2]
 
-    #     proximity_term += w * cost
+    diff_z_l = left_tip_pos[:, None, 2] - inst_pos[:, :, 2]  # (N, M)
+    diff_z_r = right_tip_pos[:, None, 2] - inst_pos[:, :, 2]
+
+    dist_xy_l = torch.sum(diff_xy_l * diff_xy_l, dim=-1)     # (N, M)
+    dist_xy_r = torch.sum(diff_xy_r * diff_xy_r, dim=-1)
+
+    in_xy_l = dist_xy_l <= drum_xy_margin ** 2
+    in_xy_r = dist_xy_r <= drum_xy_margin ** 2
+    
+    under_drum_l = in_xy_l & (diff_z_l < -drum_z_margin)
+    under_drum_r = in_xy_r & (diff_z_r < -drum_z_margin)
+
+    under_drum_pen = under_drum_l.float().sum(dim=-1) + under_drum_r.float().sum(dim=-1)
 
     # -------------------------------------------------
     # global penalties
@@ -1183,69 +1161,65 @@ def compute_reward_terms(
     high_v = torch.clamp(robot_pos - (joint_high - limit_margin), min=0.0)
     limit_pen = torch.sum(low_v * low_v + high_v * high_v, dim=-1)
 
-    # -------------------------------------------------
-    # tip limit
-    # -------------------------------------------------
-
-    tip_limit = (
-        (left_tip_pos[:, 0] > x_limit)
-        | (left_tip_pos[:, 0] < -x_limit)
-        | (right_tip_pos[:, 0] > x_limit)
-        | (right_tip_pos[:, 0] < -x_limit)
-        | (left_tip_pos[:, 1] < y_limit_l)
-        | (right_tip_pos[:, 1] < y_limit_l)
-        | (left_tip_pos[:, 1] > y_limit_h)
-        | (right_tip_pos[:, 1] > y_limit_h)
-        | (left_tip_pos[:, 2] < z_limit)
-        | (right_tip_pos[:, 2] < z_limit)
-    )
-
     return (
-        goal_success, goal_wrong, goal_missed, time_error_term,
-        proximity_term, progress_term,
-        action_l2, joint_vel_l2, limit_pen, tip_limit,
+        success_reward, wrong_cost, missed_cost, time_accuracy_reward,
+        proximity_cost, progress_reward,
+        upward_reward, downward_reward,
+        action_l2, joint_vel_l2, limit_pen, tip_limit_pen, under_drum_pen,
     )
 
 @torch.jit.script
 def compute_rewards(
-    success_term: torch.Tensor,
-    wrong_term: torch.Tensor,
-    miss_term: torch.Tensor,
-    time_error_term: torch.Tensor,
+    success_reward: torch.Tensor,
+    wrong_cost: torch.Tensor,
+    missed_cost: torch.Tensor,
+    time_accuracy_reward: torch.Tensor,
 
-    proximity_term: torch.Tensor,
-    progress_term: torch.Tensor,
+    proximity_cost: torch.Tensor,
+    progress_reward: torch.Tensor,
+
+    upward_reward: torch.Tensor,
+    downward_reward: torch.Tensor,
 
     action_l2: torch.Tensor,
     joint_vel_l2: torch.Tensor,
     limit_pen: torch.Tensor,
-    tip_limit: torch.Tensor,
+    tip_limit_pen: torch.Tensor,
+    under_drum_pen: torch.Tensor,
 
     w_success: float,
     w_wrong: float,
     w_miss: float,
-    w_time_error: float,
+    w_time_accuracy: float,
 
     w_progress: float,
     w_proximity: float,
+
+    w_upward: float,
+    w_downward: float,
 
     w_action: float,
     w_joint_vel: float,
     w_limit: float,
     w_tip_limit: float,
+    w_under_drum: float,
 ):
     reward = (
-        w_success * success_term
-        - w_wrong * wrong_term
-        - w_miss * miss_term
-        + w_time_error * time_error_term
+        w_success * success_reward
+        - w_wrong * wrong_cost
+        - w_miss * missed_cost
+        + w_time_accuracy * time_accuracy_reward
 
-        + w_progress * progress_term
-        - w_proximity * proximity_term
+        - w_proximity * proximity_cost
+        + w_progress * progress_reward
+
+        + w_upward * upward_reward
+        + w_downward * downward_reward
 
         - w_action * action_l2
         - w_joint_vel * joint_vel_l2
         - w_limit * limit_pen
-        - w_tip_limit * tip_limit
+        - w_tip_limit * tip_limit_pen
+        - w_under_drum * under_drum_pen
     )
     return reward

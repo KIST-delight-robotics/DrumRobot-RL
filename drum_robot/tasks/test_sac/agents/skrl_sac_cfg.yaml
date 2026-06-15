@@ -60,7 +60,7 @@ memory:
 
 
 # PPO agent configuration (field names are from PPO_DEFAULT_CONFIG)
-# https://skrl.readthedocs.io/en/latest/api/agents/ppo.html
+# https://skrl.readthedocs.io/en/latest/api/agents/sac.html
 agent:
   class: SAC
   rollouts: 16
@@ -96,5 +96,5 @@ agent:
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 1234567
+  timesteps: 1000000
   environment_info: log
