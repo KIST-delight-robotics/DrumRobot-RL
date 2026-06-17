@@ -34,14 +34,11 @@ class HitDetector:
         self._alloc_buffers()
         self.env_arange = torch.arange(self.env.num_envs, device=self.device)
 
-    def detect(
+    def detect_hit(
             self,
             tip_pos,
             inst_pos,
             hit_armed,
-            steps,
-            rds,
-            rds_visit,
     ):    
         # 팁 속도
         alpha = self.cfg.alpha
@@ -66,16 +63,6 @@ class HitDetector:
         # 양팔 중 하나라도 해당 drum을 strike하면 hit
         hit_mask = torch.any(hit_per_arm, dim=1)   # (N, M)
 
-        # 잘못친 타격 판정
-        wrong_hit = self._detect_wrong_hits(hit_mask, rds, steps)
-
-        # 윈도우 끝났을 때 타격 성공 확인
-        success, missed_target, time_error = self._finalize_target_outcomes(
-            rds=rds,
-            rds_visit=rds_visit,
-            steps=steps,
-        )
-
         # re-arm 확인
         next_hit_armed = self._check_rearm(hit_armed, hit_per_arm, contact_mask, diff_z)
 
@@ -87,9 +74,21 @@ class HitDetector:
         return (
             hit_mask,
             tip_pos, tip_vel, prev_tip_pos, next_hit_armed,
-            success, wrong_hit, missed_target, time_error,
             hit_per_arm,
         )
+    
+    def get_result(self, hit_mask, steps, rds, rds_visit):
+        # 잘못친 타격 판정
+        wrong_hit = self._detect_wrong_hits(hit_mask, rds, steps)
+
+        # 윈도우 끝났을 때 타격 성공 확인
+        success, missed_target, time_error = self._finalize_target_outcomes(
+            rds=rds,
+            rds_visit=rds_visit,
+            steps=steps,
+        )
+
+        return success, wrong_hit, missed_target, time_error
     
     def reset(self, env_ids, tip_pos):
         # 팁 위치/속도 리셋

@@ -177,30 +177,23 @@ class DrumRobotEnv(DirectRLEnv):
         self.robot.set_joint_position_target(self.target_joint_pos, joint_ids=self.ctrl_joint_ids)
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        rds = self.rds.get_rds()
-        rds_visit = self.rds.get_rds_visit()
-
         # 팁 위치
         tip_pos = self._compute_tip_position()   # (N, 2, 3)
 
         (
             hit_mask,
             tip_pos, tip_vel, prev_tip_pos, next_hit_armed,
-            success, wrong_hit, missed_target, time_error,
             hit_per_arm,
-        ) = self.hit_detector.detect(
+        ) = self.hit_detector.detect_hit(
             tip_pos,
             self.inst_pos,
             self.hit_armed,
-            self.steps,
-            rds,
-            rds_visit,
         )
 
         # 타격 시간 기록
         self.rds.set_rds_visit(self.steps, hit_mask)
 
-        # reward 로 넘기는 결과값
+        # reward 로 넘기는 값
         self.tip_pos = tip_pos
         self.tip_vel = tip_vel
         self.prev_tip_pos = prev_tip_pos
@@ -208,6 +201,15 @@ class DrumRobotEnv(DirectRLEnv):
         self.hit_armed_for_reward = self.hit_armed
         self.hit_armed = next_hit_armed
 
+        # 결과
+        rds = self.rds.get_rds()
+        rds_visit = self.rds.get_rds_visit()
+        success, wrong_hit, missed_target, time_error = self.hit_detector.get_result(
+            hit_mask,
+            self.steps,
+            rds,
+            rds_visit,
+        )
         self.success = success
         self.wrong_hit = wrong_hit
         self.missed_target = missed_target
@@ -304,15 +306,14 @@ class DrumRobotEnv(DirectRLEnv):
     def _setup_rl_spaces(self):
         # 반드시 single-env shape로 정의
         self.action_space = gym.spaces.Box(
-            low=-1.0, high=1.0, shape=(9,), dtype=np.float32
+            low=-1.0, high=1.0, shape=(self.cfg.action_space,), dtype=np.float32
         )
         self.observation_space = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=(94,), dtype=np.float32
+            low=-np.inf, high=np.inf, shape=(self.cfg.observation_space,), dtype=np.float32
         )
 
         # print("[DEBUG] action_space:", self.action_space)
         # print("[DEBUG] observation_space:", self.observation_space)
-        # print("[DEBUG] cfg.action_dim:", getattr(self.cfg, "action_dim", None))
 
     def _init_default_values(self):
         # env_ids
