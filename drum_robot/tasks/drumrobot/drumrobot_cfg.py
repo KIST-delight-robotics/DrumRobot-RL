@@ -120,14 +120,11 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     # 관측값 정규화 파라미터
     joint_vel_scale: float = 5.0
 
+    num_hits: int = 3               # 최대 관측 타격 개수
+
     # wrist link to tip
     tip_offset_left: tuple[float, float, float] = (0.385, 0.0, -0.023)   # [m]
     tip_offset_right: tuple[float, float, float] = (0.385, 0.0, -0.026)  # [m]
-
-    # 타격 관측
-    max_lookahead_time: float = 1.0    # 최대 관측 범위
-    num_hits: int = 3      # 최대 관측 타격 개수
-    hit_window_step: int = 10
 
     """ 시각화 설정 """
     enable_visualization: bool = False

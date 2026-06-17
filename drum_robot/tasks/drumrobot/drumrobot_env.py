@@ -14,7 +14,7 @@ from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils import math as math_utils
 
 from .drumrobot_cfg import DrumRobotEnvCfg
-from .components.specs import EnvSpec, RobotSpec
+from .components.specs import EnvSpec, RobotSpec, DrumSpec
 from .components.robotic_drum_score import RDSCfg, RDS
 from .components.robot_initializer import RobotInitializerCfg, RobotInitializer
 from .components.hit_detector import HitDetector, HitDetectorCfg
@@ -45,12 +45,15 @@ class DrumRobotEnv(DirectRLEnv):
         self._alloc_buffers()   # 버퍼 할당
         self._init_obs_norm_stats()  # 관측값 정규화를 위한 변수 초기화
 
+        hit_detector_cfg = HitDetectorCfg()
+        rds_cfg = RDSCfg()
+        max_lookahead_step = int(rds_cfg.max_lookahead_s / self.dt)
         env_specs = EnvSpec(
             num_envs=self.num_envs,
             num_drums=self.num_drums,
             episode_length_step=self.episode_length_step,
-            max_lookahead_step=self.max_lookahead_step,
-            hit_window_step=self.cfg.hit_window_step,
+            max_lookahead_step=max_lookahead_step,
+            hit_window_step=hit_detector_cfg.hit_window_step,
             dt=self.dt,
         )
 
@@ -64,7 +67,7 @@ class DrumRobotEnv(DirectRLEnv):
         # RDS
         self.rds = RDS(
             device=self.device,
-            cfg=RDSCfg(),
+            cfg=rds_cfg,
             env=env_specs,
         )
 
@@ -84,7 +87,7 @@ class DrumRobotEnv(DirectRLEnv):
         # 타격 감지
         self.hit_detector = HitDetector(
             device=self.device,
-            cfg=HitDetectorCfg(),
+            cfg=hit_detector_cfg,
             env=env_specs,
         )
 
@@ -93,6 +96,7 @@ class DrumRobotEnv(DirectRLEnv):
             device=self.device,
             cfg=RewardComputerCfg(),
             env=env_specs,
+            drum=DrumSpec(),
         )
 
         # 시각화
@@ -127,7 +131,7 @@ class DrumRobotEnv(DirectRLEnv):
         inst_pos = self.inst_pos
 
         # 다음 타격
-        self.next_hits = self.rds.get_next_hits(step=self.steps, num_hits=self.cfg.num_hits)
+        self.next_hits = self.rds.get_next_hits(step=self.steps)
 
         # 로봇 상태
         hit_armed = self.hit_armed
@@ -365,18 +369,35 @@ class DrumRobotEnv(DirectRLEnv):
         # episode length (step)
         self.episode_length_step = int(self.cfg.episode_length_s / self.dt)
 
-        # lookahead step
-        self.max_lookahead_step = int(self.cfg.max_lookahead_time / self.dt)
+        self._build_joint_tensors()
+        self._build_drum_tensors()
 
+        # obs 차원 계산
+        M = self.num_drums
+        K = self.cfg.num_hits
+        
+        self.obs_dim_joint_pos = 9                     # ctrl 관절 수
+        self.obs_dim_joint_vel = 9
+        self.obs_dim_tip       = 2 * 3                 # 양손 * xyz
+        self.obs_dim_inst      = M * 3                 # 드럼 * xyz
+        self.obs_dim_next      = K * (M + 2)           # lookahead K개 * (one-hot M + time + valid)
+        self.obs_dim_armed     = 2 * M                 # 양손 * 드럼
+        
+        obs_dim_total = (
+            self.obs_dim_joint_pos + self.obs_dim_joint_vel
+            + self.obs_dim_tip + self.obs_dim_inst
+            + self.obs_dim_next + self.obs_dim_armed
+        )
+
+        if obs_dim_total != self.cfg.observation_space:
+             pass   # TODO
+        
         # offset wrist link to tip
         L_off = torch.tensor(self.cfg.tip_offset_left, device=self.device, dtype=torch.float32)  # (3,)
         R_off = torch.tensor(self.cfg.tip_offset_right, device=self.device, dtype=torch.float32)
 
         self.tip_offset_L = L_off.unsqueeze(0).expand(self.num_envs, 3)
         self.tip_offset_R = R_off.unsqueeze(0).expand(self.num_envs, 3)
-
-        self._build_joint_tensors()
-        self._build_drum_tensors()
 
     def _build_joint_tensors(self):
 
@@ -487,10 +508,10 @@ class DrumRobotEnv(DirectRLEnv):
             [
                 joint_pos_n,
                 joint_vel_n,
-                tip_pos_n.reshape(self.num_envs, 6),
-                inst_pos_n.reshape(self.num_envs, 24),
-                next_hits.reshape(self.num_envs, 30),
-                hit_armed.reshape(self.num_envs, 16),
+                tip_pos_n.reshape(self.num_envs, self.obs_dim_tip),
+                inst_pos_n.reshape(self.num_envs, self.obs_dim_inst),
+                next_hits.reshape(self.num_envs, self.obs_dim_next),
+                hit_armed.reshape(self.num_envs, self.obs_dim_armed),
             ],
             dim=-1
         )

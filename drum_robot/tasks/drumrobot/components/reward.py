@@ -7,7 +7,7 @@ from __future__ import annotations
 import torch
 from dataclasses import dataclass
 
-from .specs import EnvSpec
+from .specs import EnvSpec, DrumSpec
 
 # === 모듈 레벨 jit 함수들 ===
 @torch.jit.script
@@ -366,10 +366,12 @@ class RewardComputer:
             self, device: torch.device | str,
             cfg: RewardComputerCfg,
             env: EnvSpec,
+            drum: DrumSpec,
     ):
         self.device = torch.device(device)
         self.cfg = cfg
         self.env = env
+        self.drum = drum
 
         # 악기별 보상 가중치
         M = env.num_drums
@@ -496,39 +498,12 @@ class RewardComputer:
             "success_rate": torch.stack([num_success, num_hit], dim=-1),
             "wrong_rate": torch.stack([num_wrong, num_hit], dim=-1),
             "miss_rate": torch.stack([num_missed, num_hit], dim=-1),
-
-            "snare_success_rate": torch.stack([success[:, 0], num_hit_inst[:, 0]], dim=-1),
-            "snare_wrong_rate": torch.stack([wrong_hit[:, 0], num_hit_inst[:, 0]], dim=-1),
-            "snare_miss_rate": torch.stack([missed_target[:, 0], num_hit_inst[:, 0]], dim=-1),
-
-            "floor_success_rate": torch.stack([success[:, 1], num_hit_inst[:, 1]], dim=-1),
-            "floor_wrong_rate": torch.stack([wrong_hit[:, 1], num_hit_inst[:, 1]], dim=-1),
-            "floor_miss_rate": torch.stack([missed_target[:, 1], num_hit_inst[:, 1]], dim=-1),
-
-            "mid_success_rate": torch.stack([success[:, 2], num_hit_inst[:, 2]], dim=-1),
-            "mid_wrong_rate": torch.stack([wrong_hit[:, 2], num_hit_inst[:, 2]], dim=-1),
-            "mid_miss_rate": torch.stack([missed_target[:, 2], num_hit_inst[:, 2]], dim=-1),
-
-            "high_success_rate": torch.stack([success[:, 3], num_hit_inst[:, 3]], dim=-1),
-            "high_wrong_rate": torch.stack([wrong_hit[:, 3], num_hit_inst[:, 3]], dim=-1),
-            "high_miss_rate": torch.stack([missed_target[:, 3], num_hit_inst[:, 3]], dim=-1),
-
-            "hihat_success_rate": torch.stack([success[:, 4], num_hit_inst[:, 4]], dim=-1),
-            "hihat_wrong_rate": torch.stack([wrong_hit[:, 4], num_hit_inst[:, 4]], dim=-1),
-            "hihat_miss_rate": torch.stack([missed_target[:, 4], num_hit_inst[:, 4]], dim=-1),
-
-            "ride_success_rate": torch.stack([success[:, 5], num_hit_inst[:, 5]], dim=-1),
-            "ride_wrong_rate": torch.stack([wrong_hit[:, 5], num_hit_inst[:, 5]], dim=-1),
-            "ride_miss_rate": torch.stack([missed_target[:, 5], num_hit_inst[:, 5]], dim=-1),
-
-            "crash1_success_rate": torch.stack([success[:, 6], num_hit_inst[:, 6]], dim=-1),
-            "crash1_wrong_rate": torch.stack([wrong_hit[:, 6], num_hit_inst[:, 6]], dim=-1),
-            "crash1_miss_rate": torch.stack([missed_target[:, 6], num_hit_inst[:, 6]], dim=-1),
-
-            "crash2_success_rate": torch.stack([success[:, 7], num_hit_inst[:, 7]], dim=-1),
-            "crash2_wrong_rate": torch.stack([wrong_hit[:, 7], num_hit_inst[:, 7]], dim=-1),
-            "crash2_miss_rate": torch.stack([missed_target[:, 7], num_hit_inst[:, 7]], dim=-1),
         }
+
+        for i, name in enumerate(list(self.drum.position.keys())):
+            p_terms[f"{name}_success_rate"] = torch.stack([success[:, i], num_hit_inst[:, i]], dim=-1)
+            p_terms[f"{name}_wrong_rate"]   = torch.stack([wrong_hit[:, i], num_hit_inst[:, i]], dim=-1)
+            p_terms[f"{name}_miss_rate"]    = torch.stack([missed_target[:, i], num_hit_inst[:, i]], dim=-1)
 
         return reward, terms, p_terms
     

@@ -38,3 +38,17 @@ class RobotSpec:
         "left_wrist":           8,
         "right_wrist":          7,
     })
+
+@dataclass
+class DrumSpec:
+    # 악기의 x, y, z 좌표 (허리 조인트 기준)
+    position: dict[str, tuple[float, float, float]] = field(default_factory=lambda: {
+        "snare":  (-0.100,  0.361,  -0.480),
+        "floor":  ( 0.232,  0.359,  -0.485),
+        "mid":    ( 0.216,  0.597,  -0.378),
+        "high":   (-0.069,  0.607,  -0.321),
+        "hihat":  (-0.292,  0.493,  -0.224),
+        "ride":   ( 0.326,  0.644,  -0.146),
+        "crash_r":( 0.485,  0.424,  -0.249),
+        "crash_l":(-0.184,  0.669,  -0.147),
+    })

@@ -111,6 +111,10 @@ class RDSCfg:
         "58",   # 뭔지 모르겠음
     })
 
+    # 타격 관측
+    max_lookahead_s: float = 1.0    # 최대 관측 범위 (초)
+    num_hits: int = 3               # 최대 관측 타격 개수
+
 class RDS:
     def __init__(
             self,
@@ -141,7 +145,7 @@ class RDS:
         # util
         self.env_arange = torch.arange(self.env.num_envs, device=self.device)
     
-    def get_next_hits(self, step, num_hits):
+    def get_next_hits(self, step):
         """
         현재 step 이후 max_lookahead_step 안에 있는 다음 K개 타격 이벤트를 반환.
 
@@ -157,7 +161,7 @@ class RDS:
         """
         N, T, M = self.rds.shape
         L = self.env.max_lookahead_step
-        K = num_hits
+        K = self.cfg.num_hits
 
         # 현재 step부터 L step 이후까지의 index 생성
         offsets = torch.arange(L, device=self.device, dtype=torch.long)  # (L,) # offset=0을 포함
