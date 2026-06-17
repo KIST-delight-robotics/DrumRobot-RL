@@ -330,35 +330,35 @@ def compute_rewards(
 @dataclass
 class RewardComputerCfg:
     # 하이퍼 파라미터
-    limit_margin = 0.08
-    k_accuracy = 1.0
-    k_time_to_hit = 3.0
+    limit_margin: float = 0.08
+    k_accuracy: float = 1.0
+    k_time_to_hit: float = 3.0
 
     # 팁이 가면 안되는 범위
-    x_limit = 0.5
-    y_limit_l = 0.2
-    y_limit_h = 0.8
-    z_limit = -0.6
-    drum_xy_margin = 0.15
-    drum_z_margin = 0.05
+    x_limit: float = 0.5
+    y_limit_l: float = 0.2
+    y_limit_h: float = 0.8
+    z_limit: float = -0.6
+    drum_xy_margin: float = 0.15
+    drum_z_margin: float = 0.05
 
     # 가중치
-    w_success = 5.0
-    w_wrong = 1.5
-    w_miss = 2.0
-    w_time_accuracy = 5.0
+    w_success: float = 5.0
+    w_wrong: float = 1.5
+    w_miss: float = 2.0
+    w_time_accuracy: float = 5.0
 
-    w_progress = 4.0
-    w_proximity = 1.5
+    w_progress: float = 4.0
+    w_proximity: float = 1.5
 
-    w_upward = 0.35
-    w_downward = 0.30
+    w_upward: float = 0.35
+    w_downward: float = 0.30
 
-    w_action = 0.0005
-    w_joint_vel = 0.0003
-    w_limit = 0.5
-    w_tip_limit = 0.15
-    w_under_drum = 0.08
+    w_action: float = 0.0005
+    w_joint_vel: float = 0.0003
+    w_limit: float = 0.5
+    w_tip_limit: float = 0.15
+    w_under_drum: float = 0.08
 
 class RewardComputer:
     def __init__(self, device: torch.device | str, cfg: RewardComputerCfg):

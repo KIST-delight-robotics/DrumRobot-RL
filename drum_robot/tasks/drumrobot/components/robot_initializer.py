@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import torch
 import math
 
@@ -166,7 +166,7 @@ class RobotInitializerCfg:
     num_ctrl_joint: int = 9
 
     # 양 팔이 위치 가능한 드럼 조합 [L, R]
-    drum_pairs = [
+    drum_pairs: list = field(default_factory=lambda: [
         (1, 1), (5, 1),
         (1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (8, 2),
         (1, 3), (3, 3), (4, 3), (5, 3), (8, 3),
@@ -175,11 +175,11 @@ class RobotInitializerCfg:
         (1, 6), (2, 6), (3, 6), (4, 6), (5, 6), (6, 6), (8, 6),
         (1, 7), (2, 7), (3, 7), (4, 7), (6, 7), (7, 7),
         (1, 8), (4, 8), (5, 8), (8, 8),
-    ]
+    ])
 
     height_above_drum: float = 0.1
 
-    inst_name_to_idx = {
+    inst_name_to_idx: dict = field(default_factory=lambda: {
         "waist_joint":          0,
         "left_shoulder_1":      2,
         "left_shoulder_2":      5,
@@ -189,7 +189,7 @@ class RobotInitializerCfg:
         "right_elbow":          4,
         "left_wrist":           8,
         "right_wrist":          7,
-    }
+    })
 
     joint_noise_scale: float = 5*math.pi/180
 

@@ -70,7 +70,7 @@ class RDSCfg:
     midi_folder_path: str = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/MIDIs"
 
     slow_factor: float = 1.5        # slow_factor=2 -> 0.5배속 / slow_factor=0.5 -> 2배속
-    start_offset_steps: float = 20
+    start_offset_steps: int = 20
 
     instrument_to_idx: dict = field(default_factory=lambda: {
         "Acoustic Snare": 0,

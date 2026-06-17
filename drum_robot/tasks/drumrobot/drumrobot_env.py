@@ -44,7 +44,7 @@ class DrumRobotEnv(DirectRLEnv):
         self._alloc_buffers()   # 버퍼 할당
         self._init_obs_norm_stats()  # 관측값 정규화를 위한 변수 초기화
 
-        specs = EnvSpec(
+        env_specs = EnvSpec(
             num_envs=self.num_envs,
             num_drums=self.num_drums,
             episode_length_step=self.episode_length_step,
@@ -60,7 +60,7 @@ class DrumRobotEnv(DirectRLEnv):
         self.rds = RDS(
             device=self.device,
             cfg=RDSCfg(),
-            env=specs,
+            env=env_specs,
         )
 
         # 로봇 초기 위치 initializer
@@ -82,7 +82,7 @@ class DrumRobotEnv(DirectRLEnv):
         self.visualizer = Visualizer(
             device=self.device,
             cfg=VisualizerCfg(),
-            env=specs,
+            env=env_specs,
             enable_visualization=self.cfg.enable_visualization,
         )
         self.visualizer.init_visualization(self.cfg.instruments)

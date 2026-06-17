@@ -21,12 +21,12 @@ DEVICE = "cuda"
 class DrumRobotEnvCfg(DirectRLEnvCfg):
 
     """ 기본 환경 설정 """
-    decimation = 2  # 정책(Policy) 업데이트 한 번당 시뮬레이션 스텝 수
-    episode_length_s = 5.0  # 에피소드 최대 길이 (초)
-    action_space = 9       # 로봇 제어 차원
-    observation_space = 94  # 관측 차원
-    state_space = 0
-    action_scale = math.pi
+    decimation: int = 2             # 정책(Policy) 업데이트 한 번당 시뮬레이션 스텝 수
+    episode_length_s: float = 5.0   # 에피소드 최대 길이 (초)
+    action_space: int = 9           # 로봇 제어 차원
+    observation_space: int = 94     # 관측 차원
+    state_space: int = 0
+    action_scale: float = math.pi
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(
@@ -79,7 +79,7 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
 
     """ 태스크 및 로봇 파라미터 """
     # 관절 제한 범위
-    joint_limit = {
+    joint_limit: dict[str, tuple[float, float]] = {
         "waist_joint":          (-90*math.pi/180,    90*math.pi/180),
         "left_shoulder_1":      ( 30*math.pi/180,   180*math.pi/180),
         "left_shoulder_2":      (-60*math.pi/180,    90*math.pi/180),
@@ -92,7 +92,7 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     }
 
     # 로봇 좌표계와 USD 파일의 방향 차이
-    joint_usd_dir = {
+    joint_usd_dir: dict[str, int] = {
         "waist_joint":          +1,
         "left_shoulder_1":      -1,
         "left_shoulder_2":      +1,
@@ -105,7 +105,7 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     }
 
     # 악기의 x, y, z 좌표 (허리 조인트 기준)
-    instruments = {
+    instruments: dict[str, tuple[float, float, float]] = {
         "snare":  (-0.100,  0.361,  -0.480),
         "floor":  ( 0.232,  0.359,  -0.485),
         "mid":    ( 0.216,  0.597,  -0.378),
@@ -121,19 +121,19 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     joint_vel_scale: float = 5.0
 
     # wrist link to tip
-    tip_offset_left = (0.385, 0.0, -0.023)   # [m]
-    tip_offset_right = (0.385, 0.0, -0.026)  # [m]
+    tip_offset_left: tuple[float, float, float] = (0.385, 0.0, -0.023)   # [m]
+    tip_offset_right: tuple[float, float, float] = (0.385, 0.0, -0.026)  # [m]
 
     # 타격 관측
     max_lookahead_time: float = 1.0    # 최대 관측 범위
     num_hits: int = 3      # 최대 관측 타격 개수
 
     # 타격 판정
-    drum_xy_radius = 0.13      # 0.15 → 0.13
-    drum_z_range = 0.07        # 0.10 → 0.07
-    min_impact_velocity = 0.2  # 0.1 → 0.2
-    rearm_height = 0.18        # 0.15 → 0.18
-    hit_window_step = 10       # 일단 유지
+    drum_xy_radius: float = 0.13      # 0.15 → 0.13
+    drum_z_range: float = 0.07        # 0.10 → 0.07
+    min_impact_velocity: float = 0.2  # 0.1 → 0.2
+    rearm_height: float = 0.18        # 0.15 → 0.18
+    hit_window_step: int = 10       # 일단 유지
 
     """ 시각화 설정 """
     enable_visualization: bool = False
