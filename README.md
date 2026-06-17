@@ -109,7 +109,7 @@ conda deactivate
   --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=4096 \
   --headless \
-  --checkpoint="logs/skrl/.../checkpoints/agent_XX.pt"
+  --checkpoint="logs/skrl/drum_robot/.../checkpoints/agent_XX.pt"
 ```
 
 ### 텐서보드
@@ -123,5 +123,5 @@ tensorboard --logdir logs/
 ../../../isaaclab.sh -p drum_robot/scripts/reinforcement_learning/skrl/play.py \
   --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=1 \
-  --checkpoint="logs/skrl/.../checkpoints/agent_XX.pt"
+  --checkpoint="logs/skrl/drum_robot/.../checkpoints/agent_XX.pt"
 ```

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from mido import MidiFile
 import torch
 from pathlib import Path
@@ -67,12 +67,12 @@ GENERAL_MIDI_PERCUSSION_KEY_MAP = {
 
 @dataclass
 class RDSCfg:
-    midi_folder_path = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/MIDIs"
+    midi_folder_path: str = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/MIDIs"
 
-    slow_factor = 1.5,    # slow_factor=2 -> 0.5배속 / slow_factor=0.5 -> 2배속
-    start_offset_steps = 20,
+    slow_factor: float = 1.5        # slow_factor=2 -> 0.5배속 / slow_factor=0.5 -> 2배속
+    start_offset_steps: float = 20
 
-    instrument_to_idx = {
+    instrument_to_idx: dict = field(default_factory=lambda: {
         "Acoustic Snare": 0,
         "Electric Snare": 0,
         "Side Stick": 0,    # 임시로 스네어 타격
@@ -101,15 +101,15 @@ class RDSCfg:
         # 알 수 없는 거
         "Tom(22)": 3,
         "Tom(26)": 3,   # 확인 필요
-    }
+    })
 
-    instrument_pedal = {
+    instrument_pedal: set = field(default_factory=lambda: {
         # 페달로 타격하는 경우 예외 처리
         "Acoustic Bass Drum",
         "Bass Drum 1",
         "Pedal Hi-Hat",
         "58",   # 뭔지 모르겠음
-    }
+    })
 
 class RDS:
     def __init__(
