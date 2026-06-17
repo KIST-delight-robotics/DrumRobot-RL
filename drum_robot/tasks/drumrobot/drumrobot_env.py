@@ -204,13 +204,14 @@ class DrumRobotEnv(DirectRLEnv):
         self.tip_pos = tip_pos
         self.tip_vel = tip_vel
         self.prev_tip_pos = prev_tip_pos
+
+        self.hit_armed_for_reward = self.hit_armed
         self.hit_armed = next_hit_armed
 
         self.success = success
         self.wrong_hit = wrong_hit
         self.missed_target = missed_target
         self.time_error = time_error
-        self.hit_armed_for_reward = self.hit_armed
 
         # episode time out
         self.steps = self.steps + 1

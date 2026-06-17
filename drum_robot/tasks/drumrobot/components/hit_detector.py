@@ -82,6 +82,7 @@ class HitDetector:
         # 
         self.tip_pos = tip_pos
         self.prev_tip_pos = prev_tip_pos
+        self.tip_vel = tip_vel
 
         return (
             hit_mask,
