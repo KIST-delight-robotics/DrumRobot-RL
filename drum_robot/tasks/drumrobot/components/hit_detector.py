@@ -32,6 +32,7 @@ class HitDetector:
         self.env = env
 
         self._alloc_buffers()
+        self.env_arange = torch.arange(self.env.num_envs, device=self.device)
 
     def detect(
             self,
@@ -106,7 +107,7 @@ class HitDetector:
         self.tip_vel = torch.zeros((N, 2, 3), device=self.device)
     
     def _compute_tip_velocity(self, tip_pos, prev_tip_pos, prev_tip_vel, alpha):
-        tip_vel = (tip_pos - prev_tip_pos) / self.dt
+        tip_vel = (tip_pos - prev_tip_pos) / self.env.dt
 
         tip_vel_f = (1 - alpha) * tip_vel + alpha * prev_tip_vel
 

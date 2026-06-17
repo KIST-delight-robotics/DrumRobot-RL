@@ -281,8 +281,8 @@ class DrumRobotEnv(DirectRLEnv):
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # tip 리셋
-        tip_pos = self._compute_tip_position()
-        self.hit_detector.reset(env_ids, tip_pos)
+        self.tip_pos = self._compute_tip_position()
+        self.hit_detector.reset(env_ids, self.tip_pos)
 
         # 텐서 변수들 리셋
         self._reset_tensors(env_ids)
