@@ -11,7 +11,7 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
 
 from .drumrobot_cfg import DrumRobotEnvCfg
-from .components.specs import EnvSpec
+from .components.specs import EnvSpec, RobotSpec
 from .components.robotic_drum_score import RDSCfg, RDS
 from .components.robot_initializer import RobotInitializerCfg, RobotInitializer
 from .components.reward import RewardComputerCfg, RewardComputer
@@ -73,6 +73,7 @@ class DrumRobotEnv(DirectRLEnv):
             ),
             ctrl_joint_names=self.ctrl_joint_names,
             instruments=self.cfg.instruments,
+            robot=RobotSpec(),
         )
 
         # 보상 계산

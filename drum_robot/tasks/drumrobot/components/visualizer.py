@@ -27,7 +27,7 @@ class VisualizerCfg:
     drum_base_color: tuple[float, float, float] = (0.2, 0.2, 0.2)
 
     hit_marker_radius: float = 0.05
-    hit_marker_hidden_position: tuple[float, float, float] = [0.0, 0.0, -1.0]
+    hit_marker_hidden_position: tuple[float, float, float] = (0.0, 0.0, -1.0)
 
     hit_marker_color: tuple[float, float, float] = (1.0, 0.0, 0.0)
 
