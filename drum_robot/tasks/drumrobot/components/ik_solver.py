@@ -35,12 +35,12 @@ class IKSolver:
 
     @torch.no_grad()
     def solve_geometric_ik(
-        self,
-        pR: torch.Tensor,       # (N, 3)
-        pL: torch.Tensor,       # (N, 3)
-        theta0: torch.Tensor,   # (N, 1)
-        theta7: torch.Tensor,   # (N, 1)
-        theta8: torch.Tensor,   # (N, 1)
+            self,
+            pR: torch.Tensor,       # (N, 3)
+            pL: torch.Tensor,       # (N, 3)
+            theta0: torch.Tensor,   # (N, 1)
+            theta7: torch.Tensor,   # (N, 1)
+            theta8: torch.Tensor,   # (N, 1)
     ) -> torch.Tensor:
 
         err = torch.zeros_like(theta0)
@@ -136,20 +136,18 @@ class IKSolver:
         err = torch.where(bad6, torch.ones_like(err), err)
 
         out = torch.stack(
-            [theta0, theta1, theta2, theta3, theta4, theta5, theta6, theta7, theta8, err],
+            [theta0, theta1, theta2, theta3, theta4, theta5, theta6, theta7, theta8],
             dim=-1
-        )  # (N,10)
+        )  # (N,9)
 
         # nan 체크
         nan_bad = torch.isnan(out[:, :9]).any(dim=-1)
         out[nan_bad, 9] = 1.0
 
-        # C++의 "sqrt 음수면 즉시 return theta0=99" 동작을 배치로 반영
         # (우측/좌측 중 하나라도 sqrt_bad면 해당 row를 에러상태로 강제)
         sqrt_bad = sqrt_bad_r | sqrt_bad_l
         if sqrt_bad.any():
             out[sqrt_bad, :] = 0.0
-            out[sqrt_bad, 0] = 99.0
-            out[sqrt_bad, 9] = 1.0
+            err[sqrt_bad] = 1.0
 
-        return out
+        return out, err

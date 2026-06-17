@@ -25,3 +25,16 @@ class PartLength:
 @dataclass
 class RobotSpec:
     part_length: PartLength = field(default_factory=PartLength)
+
+    # 관절 이름과 ik 푼 결과의 인덱스 매칭
+    joint_name_to_ik_result_idx: dict = field(default_factory=lambda: {
+        "waist_joint":          0,
+        "left_shoulder_1":      2,
+        "left_shoulder_2":      5,
+        "left_elbow":           6,
+        "right_shoulder_1":     1,
+        "right_shoulder_2":     3,
+        "right_elbow":          4,
+        "left_wrist":           8,
+        "right_wrist":          7,
+    })

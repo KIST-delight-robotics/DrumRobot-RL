@@ -30,18 +30,6 @@ class RobotInitializerCfg:
 
     height_above_drum: float = 0.1
 
-    inst_name_to_idx: dict = field(default_factory=lambda: {
-        "waist_joint":          0,
-        "left_shoulder_1":      2,
-        "left_shoulder_2":      5,
-        "left_elbow":           6,
-        "right_shoulder_1":     1,
-        "right_shoulder_2":     3,
-        "right_elbow":          4,
-        "left_wrist":           8,
-        "right_wrist":          7,
-    })
-
     joint_noise_scale: float = 5*math.pi/180
 
 class RobotInitializer:
@@ -91,14 +79,14 @@ class RobotInitializer:
         the7 = torch.full((N,), 25*math.pi/180, device=self.device)
         the8 = torch.full((N,), 25*math.pi/180, device=self.device)
 
-        out = ik_solver.solve_geometric_ik(pr, pl, the0, the7, the8)    # (N, 10)
+        out, err = ik_solver.solve_geometric_ik(pr, pl, the0, the7, the8)    # (N, 9)
 
         self.pos_angle = torch.zeros((N, self.cfg.num_ctrl_joint), device=self.device)
 
         """ 반드시 self.ctrl_joint_names 순서대로 텐서를 만들어여 함 """
         for i in range(self.cfg.num_ctrl_joint):
             name = self.ctrl_joint_names[i]
-            idx = self.cfg.inst_name_to_idx[name]
+            idx = self.robot.joint_name_to_ik_result_idx[name]
             self.pos_angle[:, i] = out[:, idx]
     
     def reset_init_pos(self, env_ids):

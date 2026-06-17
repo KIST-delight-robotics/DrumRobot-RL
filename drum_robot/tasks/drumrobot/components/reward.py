@@ -7,6 +7,8 @@ from __future__ import annotations
 import torch
 from dataclasses import dataclass
 
+from .specs import EnvSpec
+
 # === 모듈 레벨 jit 함수들 ===
 @torch.jit.script
 def assignment_reward_for_targets(
@@ -139,40 +141,39 @@ def assignment_reward_for_targets(
 
 @torch.jit.script
 def compute_reward_terms(
+        success: torch.Tensor,          # (N, M)
+        wrong_hit: torch.Tensor,        # (N, M)
+        missed_target: torch.Tensor,    # (N, M)
+        time_error: torch.Tensor,       # (N, M)
 
-    success: torch.Tensor,          # (N, M)
-    wrong_hit: torch.Tensor,        # (N, M)
-    missed_target: torch.Tensor,    # (N, M)
-    time_error: torch.Tensor,       # (N, M)
+        left_tip_pos: torch.Tensor,     # (N, 3) [m]
+        right_tip_pos: torch.Tensor,    # (N, 3) [m]
+        prev_left_tip_pos: torch.Tensor,
+        prev_right_tip_pos: torch.Tensor,
+        inst_pos: torch.Tensor,         # (N, M, 3) [m]
+        next_hits: torch.Tensor,        # (N, K, M+2)
 
-    left_tip_pos: torch.Tensor,     # (N, 3) [m]
-    right_tip_pos: torch.Tensor,    # (N, 3) [m]
-    prev_left_tip_pos: torch.Tensor,
-    prev_right_tip_pos: torch.Tensor,
-    inst_pos: torch.Tensor,         # (N, M, 3) [m]
-    next_hits: torch.Tensor,        # (N, K, M+2)
+        tip_vel: torch.Tensor,          # (N, 2, 3)
+        hit_armed: torch.Tensor,        # (N, 2, M)
 
-    tip_vel: torch.Tensor,          # (N, 2, 3)
-    hit_armed: torch.Tensor,        # (N, 2, M)
+        joint_vel: torch.Tensor,        # (N, num_joints) [rad/s]
+        action: torch.Tensor,           # (N, 9) [-1,1]
+        robot_pos: torch.Tensor,        # (N, 9) [rad]
+        joint_low: torch.Tensor,        # (1, 9) [rad]
+        joint_high: torch.Tensor,       # (1, 9) [rad]
 
-    joint_vel: torch.Tensor,        # (N, num_joints) [rad/s]
-    action: torch.Tensor,           # (N, 9) [-1,1]
-    robot_pos: torch.Tensor,        # (N, 9) [rad]
-    joint_low: torch.Tensor,        # (1, 9) [rad]
-    joint_high: torch.Tensor,       # (1, 9) [rad]
+        w_inst_success: torch.Tensor,   # (1, M)
 
-    w_inst_success: torch.Tensor,   # (1, M)
+        k_accuracy: float,
+        k_time_to_hit: float,
+        limit_margin: float,
 
-    k_accuracy: float,
-    k_time_to_hit: float,
-    limit_margin: float,
-
-    x_limit: float,
-    y_limit_l: float,
-    y_limit_h: float,
-    z_limit: float,
-    drum_xy_margin: float,
-    drum_z_margin: float,
+        x_limit: float,
+        y_limit_l: float,
+        y_limit_h: float,
+        z_limit: float,
+        drum_xy_margin: float,
+        drum_z_margin: float,
 ):
     # -------------------------------------------------
     # goal terms
@@ -272,39 +273,39 @@ def compute_reward_terms(
 
 @torch.jit.script
 def compute_rewards(
-    success_reward: torch.Tensor,
-    wrong_cost: torch.Tensor,
-    missed_cost: torch.Tensor,
-    time_accuracy_reward: torch.Tensor,
+        success_reward: torch.Tensor,
+        wrong_cost: torch.Tensor,
+        missed_cost: torch.Tensor,
+        time_accuracy_reward: torch.Tensor,
 
-    proximity_cost: torch.Tensor,
-    progress_reward: torch.Tensor,
+        proximity_cost: torch.Tensor,
+        progress_reward: torch.Tensor,
 
-    upward_reward: torch.Tensor,
-    downward_reward: torch.Tensor,
+        upward_reward: torch.Tensor,
+        downward_reward: torch.Tensor,
 
-    action_l2: torch.Tensor,
-    joint_vel_l2: torch.Tensor,
-    limit_pen: torch.Tensor,
-    tip_limit_pen: torch.Tensor,
-    under_drum_pen: torch.Tensor,
+        action_l2: torch.Tensor,
+        joint_vel_l2: torch.Tensor,
+        limit_pen: torch.Tensor,
+        tip_limit_pen: torch.Tensor,
+        under_drum_pen: torch.Tensor,
 
-    w_success: float,
-    w_wrong: float,
-    w_miss: float,
-    w_time_accuracy: float,
+        w_success: float,
+        w_wrong: float,
+        w_miss: float,
+        w_time_accuracy: float,
 
-    w_progress: float,
-    w_proximity: float,
+        w_progress: float,
+        w_proximity: float,
 
-    w_upward: float,
-    w_downward: float,
+        w_upward: float,
+        w_downward: float,
 
-    w_action: float,
-    w_joint_vel: float,
-    w_limit: float,
-    w_tip_limit: float,
-    w_under_drum: float,
+        w_action: float,
+        w_joint_vel: float,
+        w_limit: float,
+        w_tip_limit: float,
+        w_under_drum: float,
 ):
     reward = (
         w_success * success_reward
@@ -361,12 +362,17 @@ class RewardComputerCfg:
     w_under_drum: float = 0.08
 
 class RewardComputer:
-    def __init__(self, device: torch.device | str, cfg: RewardComputerCfg):
+    def __init__(
+            self, device: torch.device | str,
+            cfg: RewardComputerCfg,
+            env: EnvSpec,
+    ):
         self.device = torch.device(device)
         self.cfg = cfg
+        self.env = env
 
         # 악기별 보상 가중치
-        M = 8
+        M = env.num_drums
         self.w_inst_success = torch.ones((1, M), device=self.device)
         self.n_success = torch.zeros((1, M), device=self.device)
         self.n_hit = torch.zeros((1, M), device=self.device)
