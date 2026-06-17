@@ -11,25 +11,10 @@ import isaaclab.sim as sim_utils
 import omni.usd
 from pxr import UsdGeom, Gf
 
+from .specs import EnvSpec
+
 @dataclass
 class VisualizerCfg:
-
-    """
-    Env 에게 전달 받을 설정값
-    """
-
-    enable_visualization: bool
-
-    num_envs: int
-    num_drum: int
-
-    max_lookahead_step: int
-    hit_window_step: int
-
-    """
-    시각화 설정
-    """
-
     tip_marker_radius: float = 0.015
 
     tip_color: tuple[float, float, float] = (1.0, 0.0, 0.0)
@@ -48,30 +33,34 @@ class VisualizerCfg:
 
 class Visualizer():
     def __init__(
-          self,
-          device: torch.device | str,
-          cfg: VisualizerCfg,
+            self,
+            device: torch.device | str,
+            cfg: VisualizerCfg,
+            env: EnvSpec,
+            enable_visualization: bool
     ):
         self.device = device
         self.cfg = cfg
+        self.env = env
+        self.enable_visualization = enable_visualization
 
     # =========================================================
     # Public Interface
     # =========================================================
     def init_visualization(self, instruments):
-        if self.cfg.enable_visualization:
+        if self.enable_visualization:
             # self._init_tip()
             self._init_drum(instruments)
             self._init_hit_marker()
     
     def step(self, tip_pos, next_hits, hit_per_arm):
-        if self.cfg.enable_visualization:
+        if self.enable_visualization:
             # self._translate_tip(tip_pos)
             self._update_drum_color(next_hits)
             self._translate_hit_marker(tip_pos, hit_per_arm)
     
     def reset(self, inst_pos):
-        if self.cfg.enable_visualization:
+        if self.enable_visualization:
             self._translate_drum(inst_pos)
         
     # =========================================================
@@ -134,9 +123,9 @@ class Visualizer():
         self._translate(self.tip_translate_ops_R, tip_pos[:, 1, :])
 
     def _update_drum_color(self, next_hits):
-        M = self.cfg.num_drum
-        L = self.cfg.max_lookahead_step
-        W = self.cfg.hit_window_step
+        M = self.env.num_drums
+        L = self.env.max_lookahead_step
+        W = self.env.hit_window_step
 
         hits = next_hits[:, :, :M]
         times = next_hits[:, :, M]
@@ -195,7 +184,7 @@ class Visualizer():
             self._translate(hit_ids, tip_pos[hit_mask])
 
     def _translate_drum(self, inst_pos):
-        for i in range(self.cfg.num_drum):
+        for i in range(self.env.num_drums):
             p = inst_pos[:, i, :]
             self._translate(self._drum_translate_ops[i], p)
 
@@ -217,7 +206,7 @@ class Visualizer():
         # 현재 IsaacSim의 USD Stage 접근
         stage = omni.usd.get_context().get_stage()
 
-        for i in range(self.cfg.num_envs):
+        for i in range(self.env.num_envs):
 
             # USD Stage 위에 Prim을 생성 (이미 존재하면 타입을 유지한 채 반환)
             viz_root = f"/World/envs/env_{i}/_viz"
@@ -265,7 +254,7 @@ class Visualizer():
         # 현재 IsaacSim의 USD Stage 접근
         stage = omni.usd.get_context().get_stage()
 
-        for i in range(self.cfg.num_envs):
+        for i in range(self.env.num_envs):
 
             # USD Stage 위에 Prim을 생성 (이미 존재하면 타입을 유지한 채 반환)
             viz_root = f"/World/envs/env_{i}/_viz"

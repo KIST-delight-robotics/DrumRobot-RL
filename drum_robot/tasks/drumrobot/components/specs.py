@@ -12,4 +12,5 @@ class EnvSpec:
     num_drums: int
     episode_length_step: int
     max_lookahead_step: int
+    hit_window_step: int
     dt: float

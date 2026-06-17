@@ -69,9 +69,8 @@ GENERAL_MIDI_PERCUSSION_KEY_MAP = {
 class RDSCfg:
     midi_folder_path = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/MIDIs"
 
-    slow_factor: float = 2.0   # 0.5배속
-    start_offset_steps: int = 20
-    hit_window_step: int = 5
+    slow_factor = 1.5,    # slow_factor=2 -> 0.5배속 / slow_factor=0.5 -> 2배속
+    start_offset_steps = 20,
 
     instrument_to_idx = {
         "Acoustic Snare": 0,
@@ -113,7 +112,6 @@ class RDSCfg:
     }
 
 class RDS:
-
     def __init__(
             self,
             device: torch.device | str,
@@ -128,8 +126,8 @@ class RDS:
         self.rng = random.Random()
 
         self.midi_files = self._glob_midi_files()
-        self.rds = self._build_rds_dataset(self.midi_files)
-        self.score = self._compute_score(self.rds)                     # (N,)
+        self.rds_dataset = self._build_rds_dataset(self.midi_files)
+        self.score = self._compute_score(self.rds_dataset)
 
         # 목표 악보을 저장할 텐서
         N = env.num_envs
@@ -369,7 +367,7 @@ class RDS:
 
             # 시간 → index
             time_idx = int(round(self.cfg.slow_factor * (t - first_t) / self.env.dt)) + self.cfg.start_offset_steps
-            safe_T = T - self.cfg.hit_window_step   # episode 마지막 W step은 판정하지 않음으로 타격으로 채우지 않음
+            safe_T = T - self.env.hit_window_step   # episode 마지막 W step은 판정하지 않음으로 타격으로 채우지 않음
             if time_idx >= safe_T:
                 continue  # episode 길이 초과 이벤트는 무시
 
@@ -441,7 +439,7 @@ class RDS:
             replacement=True    # 같은 인덱스가 여러 번 뽑힐 수 있음
         )
 
-        return self.rds[idx]
+        return self.rds_dataset[idx]
 
     def _reset_random(self, env_ids):
         N = len(env_ids)
@@ -451,7 +449,7 @@ class RDS:
         rds_rand = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
 
         s = self.cfg.start_offset_steps
-        e = T - self.cfg.hit_window_step
+        e = T - self.env.hit_window_step
 
         k = 10
         for i in range(k):

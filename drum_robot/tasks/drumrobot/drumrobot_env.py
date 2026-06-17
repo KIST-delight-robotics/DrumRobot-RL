@@ -49,21 +49,18 @@ class DrumRobotEnv(DirectRLEnv):
             num_drums=self.num_drums,
             episode_length_step=self.episode_length_step,
             max_lookahead_step=self.max_lookahead_step,
+            hit_window_step=self.cfg.hit_window_step,
             dt=self.dt,
         )
 
         # 로그
         self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=2000, sample_env_id=0))
         
-        # RDS initializer
+        # RDS
         self.rds = RDS(
-            self.device,
-            RDSCfg(
-                slow_factor=1.5,
-                start_offset_steps=20,
-                hit_window_step=self.cfg.hit_window_step,
-            ),
-            specs,
+            device=self.device,
+            cfg=RDSCfg(),
+            env=specs,
         )
 
         # 로봇 초기 위치 initializer
@@ -84,13 +81,9 @@ class DrumRobotEnv(DirectRLEnv):
         # 시각화
         self.visualizer = Visualizer(
             device=self.device,
-            cfg=VisualizerCfg(
-                enable_visualization=self.cfg.enable_visualization,
-                num_envs=self.num_envs,
-                num_drum=self.num_drums,
-                max_lookahead_step=self.max_lookahead_step,
-                hit_window_step=self.cfg.hit_window_step,
-            ),
+            cfg=VisualizerCfg(),
+            env=specs,
+            enable_visualization=self.cfg.enable_visualization,
         )
         self.visualizer.init_visualization(self.cfg.instruments)
 
