@@ -53,9 +53,6 @@ class DrumRobotEnv(DirectRLEnv):
             self.num_envs,
             self.device,
             RdsInitializerCfg(
-                episode_length_s=self.cfg.episode_length_s,
-                dt=self.dt,
-                num_drum=self.num_drum,
                 slow_factor=1.5,
                 start_offset_steps=20,
                 hit_window_step=self.cfg.hit_window_step,

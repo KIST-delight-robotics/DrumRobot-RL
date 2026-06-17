@@ -1,5 +1,5 @@
 """
-보상 계산
+보상 클래스
 """
 
 from __future__ import annotations

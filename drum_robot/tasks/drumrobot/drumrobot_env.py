@@ -11,7 +11,8 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
 
 from .drumrobot_cfg import DrumRobotEnvCfg
-from .components.rds_initializer import RdsInitializerCfg, RdsInitializer
+from .components.specs import EnvSpec
+from .components.robotic_drum_score import RDSCfg, RDS
 from .components.robot_initializer import RobotInitializerCfg, RobotInitializer
 from .components.reward import RewardComputerCfg, RewardComputer
 from .components.visualizer import VisualizerCfg, Visualizer
@@ -43,21 +44,26 @@ class DrumRobotEnv(DirectRLEnv):
         self._alloc_buffers()   # 버퍼 할당
         self._init_obs_norm_stats()  # 관측값 정규화를 위한 변수 초기화
 
+        specs = EnvSpec(
+            num_envs=self.num_envs,
+            num_drums=self.num_drums,
+            episode_length_step=self.episode_length_step,
+            max_lookahead_step=self.max_lookahead_step,
+            dt=self.dt,
+        )
+
         # 로그
-        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=100000, sample_env_id=0))
+        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=2000, sample_env_id=0))
         
         # RDS initializer
-        self.rds_initializer = RdsInitializer(
-            self.num_envs,
+        self.rds = RDS(
             self.device,
-            RdsInitializerCfg(
-                episode_length_s=self.cfg.episode_length_s,
-                dt=self.dt,
-                num_drum=self.num_drum,
+            RDSCfg(
                 slow_factor=1.5,
                 start_offset_steps=20,
                 hit_window_step=self.cfg.hit_window_step,
             ),
+            specs,
         )
 
         # 로봇 초기 위치 initializer
@@ -81,7 +87,7 @@ class DrumRobotEnv(DirectRLEnv):
             cfg=VisualizerCfg(
                 enable_visualization=self.cfg.enable_visualization,
                 num_envs=self.num_envs,
-                num_drum=self.num_drum,
+                num_drum=self.num_drums,
                 max_lookahead_step=self.max_lookahead_step,
                 hit_window_step=self.cfg.hit_window_step,
             ),
@@ -111,8 +117,7 @@ class DrumRobotEnv(DirectRLEnv):
         inst_pos = self.inst_pos
 
         # 다음 타격
-        next_hits = self._get_next_hits(rds=self.rds, step=self.steps)
-        self.next_hits = next_hits
+        self.next_hits = self.rds.get_next_hits(step=self.steps, num_hits=self.cfg.num_hits)
 
         # 로봇 상태
         hit_armed = self.hit_armed
@@ -122,7 +127,7 @@ class DrumRobotEnv(DirectRLEnv):
             joint_vel=joint_vel,
             tip_pos=tip_pos,
             inst_pos=inst_pos,
-            next_hits=next_hits,
+            next_hits=self.next_hits,
             hit_armed=hit_armed.float(),
             )
         
@@ -188,16 +193,17 @@ class DrumRobotEnv(DirectRLEnv):
 
         # 타격 시간 기록
         steps = self.steps
-        self.rds_visit[self.env_arange, steps, :] = hit_mask    # 타격한 시간에 방문 처리
+        self.rds.set_rds_visit(steps, hit_mask)
 
         # 잘못친 타격 판정
-        rds = self.rds
+        rds = self.rds.get_rds()
+        rds_visit = self.rds.get_rds_visit()
         wrong_hit = self._detect_wrong_hits(hit_mask, rds, steps)
 
         # 윈도우 끝났을 때 타격 성공 확인
         success, missed_target, time_error = self._finalize_target_outcomes(
             rds=rds,
-            rds_visit=self.rds_visit,
+            rds_visit=rds_visit,
             steps=steps,
         )
 
@@ -218,7 +224,7 @@ class DrumRobotEnv(DirectRLEnv):
 
         # episode time out
         self.steps = self.steps + 1
-        time_out = self.steps >= self.episode_length - 1
+        time_out = self.steps >= self.episode_length_step - 1
         # time_out = self.episode_length_buf >= self.max_episode_length - 1
         died = torch.zeros((self.num_envs,), device=self.device, dtype=torch.bool)
 
@@ -277,9 +283,7 @@ class DrumRobotEnv(DirectRLEnv):
         self.inst_pos[env_ids] = inst_pos
 
         # RDS 리셋
-        robotic_drum_score = self.rds_initializer.reset_target(env_ids=env_ids, score_ratio=0.0, selection_strength=0.0)  # 랜덤으로 RDS 생성해서 사용
-        self.rds[env_ids] = robotic_drum_score
-        self.rds_visit[env_ids] = False
+        self.rds.reset(env_ids=env_ids, score_ratio=0.0, selection_strength=0.0)  # 랜덤으로 RDS 생성해서 사용
 
         # 로봇 자세 리셋
         default_joint_pos = self.robot.data.default_joint_pos[env_ids]  # 기본 자세 가져오기
@@ -369,7 +373,7 @@ class DrumRobotEnv(DirectRLEnv):
         self.dt = self.cfg.sim.dt * self.cfg.decimation
 
         # episode length (step)
-        self.episode_length = int(self.cfg.episode_length_s / self.dt)
+        self.episode_length_step = int(self.cfg.episode_length_s / self.dt)
 
         # lookahead step
         self.max_lookahead_step = int(self.cfg.max_lookahead_time / self.dt)
@@ -419,12 +423,12 @@ class DrumRobotEnv(DirectRLEnv):
             dtype=torch.float32
         )
 
-        self.num_drum = len(self.basic_inst_pos[:,0])
+        self.num_drums = len(self.basic_inst_pos[:,0])
 
     def _alloc_buffers(self):
         N = self.num_envs
-        T = self.episode_length
-        M = self.num_drum
+        T = self.episode_length_step
+        M = self.num_drums
 
         # 로봇의 tip 위치를 저장할 텐서
         self.tip_pos = torch.zeros((N, 2, 3), device=self.device)
@@ -441,10 +445,6 @@ class DrumRobotEnv(DirectRLEnv):
         # 타격 상태 버퍼
         self.hit_armed = torch.ones((N, 2, M), device=self.device, dtype=torch.bool)
         self.hit_armed_for_reward = torch.ones((N, 2, M), device=self.device, dtype=torch.bool) # 보상 계산용
-
-        # 목표 악보을 저장할 텐서
-        self.rds = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
-        self.rds_visit = torch.zeros((N, T, M), device=self.device, dtype=torch.bool)
 
         # step
         self.steps = torch.zeros((N,), device=self.device, dtype=torch.int64)
@@ -474,77 +474,6 @@ class DrumRobotEnv(DirectRLEnv):
         return self.dir_tensor * robot_data
 
     """ func (_get_observations) """
-    def _get_next_hits(self, rds, step):
-        """
-        현재 step 이후 max_lookahead_step 안에 있는 다음 K개 타격 이벤트를 반환.
-
-        Args:
-            rds:  (N, T, M)  # RDS, time x drum multi-hot
-            step: (N,)       # 현재 step
-
-        Returns:
-            next_hits_obs: (N, K, M + 2)
-                [:, :, :M]     = target drum multi-hot
-                [:, :, M]      = normalized time_to_hit, 0.0 ~ 1.0
-                [:, :, M + 1]  = valid flag, 1이면 유효 이벤트, 0이면 없음
-        """
-        N, T, M = rds.shape
-        L = self.max_lookahead_step
-        K = self.cfg.num_hits
-
-        # 현재 step부터 L step 이후까지의 index 생성
-        offsets = torch.arange(L, device=self.device, dtype=torch.long)  # (L,) # offset=0을 포함
-        idx = step.unsqueeze(1) + offsets.unsqueeze(0)              # (N, L)
-
-        valid_time = (idx >= 0) & (idx < T)                         # (N, L)
-        idx_clamped = idx.clamp(0, T - 1)
-
-        # 미래 RDS window 추출
-        future_rds = rds.gather(
-            dim=1,
-            index=idx_clamped.unsqueeze(-1).expand(-1, -1, M)
-        )   # (N, L, M)
-
-        # T 범위 밖은 0 처리
-        future_rds = future_rds * valid_time.unsqueeze(-1).to(future_rds.dtype)
-
-        # 해당 timestep에 하나 이상의 드럼 hit가 있으면 event
-        event_mask = future_rds.sum(dim=-1) > 0  # (N, L)
-
-        # 각 env별 event 순서 번호
-        # event가 아닌 위치도 값은 생기지만 event_mask로 다시 걸러냄
-        event_order = torch.cumsum(event_mask.to(torch.long), dim=1) - 1    # (N, L)  # torch.cumsum: dim 방향으로 누적 합
-
-        # K개까지만 선택
-        selected = event_mask & (event_order >= 0) & (event_order < K)  # (N, L)
-
-        # 출력 버퍼 생성
-        next_targets = torch.zeros((N, K, M), device=self.device, dtype=torch.float32)
-        next_times = torch.ones((N, K, 1), device=self.device, dtype=torch.float32)
-        next_valid = torch.zeros((N, K, 1), device=self.device, dtype=torch.float32)
-
-        if selected.any():
-            env_idx, time_idx = torch.where(selected)      # 선택된 event 위치  # (num_selected,)
-            hit_idx = event_order[env_idx, time_idx]       # 몇 번째 hit인지, 0 ~ K-1
-
-            # target multi-hot
-            next_targets[env_idx, hit_idx] = future_rds[env_idx, time_idx].to(torch.float32)
-
-            # normalized time_to_hit
-            # offset 0이면 지금, offset L이면 horizon 끝
-            time_norm = offsets[time_idx].to(torch.float32) / float(L - 1)
-            time_norm = torch.clamp(time_norm, 0.0, 1.0)
-
-            next_times[env_idx, hit_idx, 0] = time_norm
-            next_valid[env_idx, hit_idx, 0] = 1.0
-
-        next_hits = torch.cat(
-            [next_targets, next_times, next_valid],
-            dim=-1
-        )   # (N, K, M+2)
-
-        return next_hits
-
     def _normalize_and_pack_obs(self,
             joint_pos,
             joint_vel,
@@ -662,8 +591,8 @@ class DrumRobotEnv(DirectRLEnv):
         # steps: (N,)
 
         N = self.num_envs
-        T = self.episode_length
-        M = self.num_drum
+        T = self.episode_length_step
+        M = self.num_drums
         W = self.cfg.hit_window_step
 
         window_target_union = torch.zeros((N, M), device=self.device, dtype=torch.bool)
@@ -687,8 +616,8 @@ class DrumRobotEnv(DirectRLEnv):
         # steps: (N,)
 
         N = self.num_envs
-        T = self.episode_length
-        M = self.num_drum
+        T = self.episode_length_step
+        M = self.num_drums
         W = self.cfg.hit_window_step
 
         success = torch.zeros((N, M), device=self.device, dtype=torch.bool)

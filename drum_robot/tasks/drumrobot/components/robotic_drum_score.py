@@ -1,5 +1,5 @@
 """
-목표 악보(RDS: robotic drum score) 초기화 클래스 
+목표 악보(RDS: robotic drum score) 클래스
 """
 
 from __future__ import annotations
@@ -10,6 +10,8 @@ import torch
 from pathlib import Path
 import random
 import time
+
+from .specs import EnvSpec
 
 GENERAL_MIDI_PERCUSSION_KEY_MAP = {
     35: "Acoustic Bass Drum",
@@ -64,17 +66,8 @@ GENERAL_MIDI_PERCUSSION_KEY_MAP = {
 }
 
 @dataclass
-class RdsInitializerCfg:
+class RDSCfg:
     midi_folder_path = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/MIDIs"
-
-    # 에피소드 시간
-    episode_length_s: float = 5.0
-
-    # 스텝 시간
-    dt: float = 1/60
-
-    # 드럼 악기의 개수
-    num_drum: int = 8
 
     slow_factor: float = 2.0   # 0.5배속
     start_offset_steps: int = 20
@@ -119,13 +112,17 @@ class RdsInitializerCfg:
         "58",   # 뭔지 모르겠음
     }
 
-class RdsInitializer:
+class RDS:
 
-    def __init__(self, num_envs: int, device: torch.device | str, cfg: RdsInitializerCfg):
-        self.num_envs = int(num_envs)
+    def __init__(
+            self,
+            device: torch.device | str,
+            cfg: RDSCfg,
+            env: EnvSpec,
+    ):
         self.device = torch.device(device)
         self.cfg = cfg
-        self.episode_length = int(self.cfg.episode_length_s / self.cfg.dt)
+        self.env = env
 
         random.seed(time.time_ns())
         self.rng = random.Random()
@@ -133,7 +130,126 @@ class RdsInitializer:
         self.midi_files = self._glob_midi_files()
         self.rds = self._build_rds_dataset(self.midi_files)
         self.score = self._compute_score(self.rds)                     # (N,)
+
+        # 목표 악보을 저장할 텐서
+        N = env.num_envs
+        T = env.episode_length_step
+        M = env.num_drums
+
+        self.rds = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
+        self.rds_visit = torch.zeros((N, T, M), device=self.device, dtype=torch.bool)
     
+    def get_next_hits(self, step, num_hits):
+        """
+        현재 step 이후 max_lookahead_step 안에 있는 다음 K개 타격 이벤트를 반환.
+
+        Args:
+            rds:  (N, T, M)  # RDS, time x drum multi-hot
+            step: (N,)       # 현재 step
+
+        Returns:
+            next_hits_obs: (N, K, M + 2)
+                [:, :, :M]     = target drum multi-hot
+                [:, :, M]      = normalized time_to_hit, 0.0 ~ 1.0
+                [:, :, M + 1]  = valid flag, 1이면 유효 이벤트, 0이면 없음
+        """
+        N, T, M = self.rds.shape
+        L = self.env.max_lookahead_step
+        K = num_hits
+
+        # 현재 step부터 L step 이후까지의 index 생성
+        offsets = torch.arange(L, device=self.device, dtype=torch.long)  # (L,) # offset=0을 포함
+        idx = step.unsqueeze(1) + offsets.unsqueeze(0)              # (N, L)
+
+        valid_time = (idx >= 0) & (idx < T)                         # (N, L)
+        idx_clamped = idx.clamp(0, T - 1)
+
+        # 미래 RDS window 추출
+        future_rds = self.rds.gather(
+            dim=1,
+            index=idx_clamped.unsqueeze(-1).expand(-1, -1, M)
+        )   # (N, L, M)
+
+        # T 범위 밖은 0 처리
+        future_rds = future_rds * valid_time.unsqueeze(-1).to(future_rds.dtype)
+
+        # 해당 timestep에 하나 이상의 드럼 hit가 있으면 event
+        event_mask = future_rds.sum(dim=-1) > 0  # (N, L)
+
+        # 각 env별 event 순서 번호
+        # event가 아닌 위치도 값은 생기지만 event_mask로 다시 걸러냄
+        event_order = torch.cumsum(event_mask.to(torch.long), dim=1) - 1    # (N, L)  # torch.cumsum: dim 방향으로 누적 합
+
+        # K개까지만 선택
+        selected = event_mask & (event_order >= 0) & (event_order < K)  # (N, L)
+
+        # 출력 버퍼 생성
+        next_targets = torch.zeros((N, K, M), device=self.device, dtype=torch.float32)
+        next_times = torch.ones((N, K, 1), device=self.device, dtype=torch.float32)
+        next_valid = torch.zeros((N, K, 1), device=self.device, dtype=torch.float32)
+
+        if selected.any():
+            env_idx, time_idx = torch.where(selected)      # 선택된 event 위치  # (num_selected,)
+            hit_idx = event_order[env_idx, time_idx]       # 몇 번째 hit인지, 0 ~ K-1
+
+            # target multi-hot
+            next_targets[env_idx, hit_idx] = future_rds[env_idx, time_idx].to(torch.float32)
+
+            # normalized time_to_hit
+            # offset 0이면 지금, offset L이면 horizon 끝
+            time_norm = offsets[time_idx].to(torch.float32) / float(L - 1)
+            time_norm = torch.clamp(time_norm, 0.0, 1.0)
+
+            next_times[env_idx, hit_idx, 0] = time_norm
+            next_valid[env_idx, hit_idx, 0] = 1.0
+
+        next_hits = torch.cat(
+            [next_targets, next_times, next_valid],
+            dim=-1
+        )   # (N, K, M+2)
+
+        return next_hits
+    
+    def set_rds_visit(self, steps, hit_mask):
+        env_arange = torch.arange(self.env.num_envs, device=self.device)
+        self.rds_visit[env_arange, steps, :] = hit_mask    # 타격한 시간에 방문 처리
+
+    def get_rds(self):
+        return self.rds
+    
+    def get_rds_visit(self):
+        return self.rds_visit
+
+    def reset(self, env_ids, score_ratio=0.5, selection_strength=0.5):
+        N = len(env_ids)
+
+        num_score = int(N * score_ratio)
+
+        perm = torch.randperm(N, device=self.device)    # 0~N 사이의 정수를 무작위로 섞어서 텐서 만들기
+        score_env_ids = env_ids[perm[:num_score]]
+        rand_env_ids = env_ids[perm[num_score:]]
+
+        outputs = []
+
+        # score-based
+        if num_score > 0:
+            out_score = self._reset_midi(
+                score_env_ids,
+                selection_strength=selection_strength
+            )
+            outputs.append(out_score)
+
+        # random-based
+        if N - num_score > 0:
+            out_rand = self._reset_random(rand_env_ids)
+            outputs.append(out_rand)
+
+        # reset
+        robotic_drum_score = torch.cat(outputs, dim=0)
+        self.rds[env_ids] = robotic_drum_score
+        self.rds_visit[env_ids] = False
+
+    # ===== INIT =====
     def _glob_midi_files(self):
         folder = Path(self.cfg.midi_folder_path)
         midi_files = list(folder.glob("*.mid"))
@@ -153,7 +269,7 @@ class RdsInitializer:
             prev_t = 0.0
 
             while not end_event:
-                rds, t, end_event = self._generate_rds(prev_t)
+                rds, t, end_event = self._generate_rds_from_midi(prev_t)
                 prev_t = t
 
                 if torch.any(rds > 0):
@@ -215,9 +331,9 @@ class RdsInitializer:
         #     print(f"{t:.3f}s : {inst}")
         self.events = events
     
-    def _generate_rds(self, prev_t):
-        T = self.episode_length
-        M = self.cfg.num_drum
+    def _generate_rds_from_midi(self, prev_t):
+        T = self.env.episode_length_step
+        M = self.env.num_drums
 
         bpm = self.bpm
         events = self.events
@@ -252,7 +368,7 @@ class RdsInitializer:
             inst_idx = self.cfg.instrument_to_idx[inst]
 
             # 시간 → index
-            time_idx = int(round(self.cfg.slow_factor * (t - first_t) / self.cfg.dt)) + self.cfg.start_offset_steps
+            time_idx = int(round(self.cfg.slow_factor * (t - first_t) / self.env.dt)) + self.cfg.start_offset_steps
             safe_T = T - self.cfg.hit_window_step   # episode 마지막 W step은 판정하지 않음으로 타격으로 채우지 않음
             if time_idx >= safe_T:
                 continue  # episode 길이 초과 이벤트는 무시
@@ -307,8 +423,9 @@ class RdsInitializer:
         # print(f"crash_rate: {crash_exist.sum()/N}")
 
         return score
-
-    def _reset_target_midi(self, env_ids, selection_strength=0.5):
+    
+    # ===== RESET =====
+    def _reset_midi(self, env_ids, selection_strength=0.5):
         weights = self.score.clone()
 
         # selection_strength 랜덤성 조절 (0 <= selection_strength < 1)
@@ -326,10 +443,10 @@ class RdsInitializer:
 
         return self.rds[idx]
 
-    def _reset_target_rand(self, env_ids):
+    def _reset_random(self, env_ids):
         N = len(env_ids)
-        T = self.episode_length
-        M = self.cfg.num_drum
+        T = self.env.episode_length_step
+        M = self.env.num_drums
 
         rds_rand = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
 
@@ -346,36 +463,3 @@ class RdsInitializer:
             rds_rand[torch.arange(N), time_rand, inst_rand] = 1
 
         return rds_rand
-    
-    def reset_target(self, env_ids, score_ratio=0.5, selection_strength=0.5):
-        N = len(env_ids)
-
-        num_score = int(N * score_ratio)
-
-        perm = torch.randperm(N, device=self.device)    # 0~N 사이의 정수를 무작위로 섞어서 텐서 만들기
-        score_env_ids = env_ids[perm[:num_score]]
-        rand_env_ids = env_ids[perm[num_score:]]
-
-        outputs = []
-
-        # -------------------
-        # score-based
-        # -------------------
-        if num_score > 0:
-            out_score = self._reset_target_midi(
-                score_env_ids,
-                selection_strength=selection_strength
-            )
-            outputs.append(out_score)
-
-        # -------------------
-        # random-based
-        # -------------------
-        if N - num_score > 0:
-            out_rand = self._reset_target_rand(rand_env_ids)
-            outputs.append(out_rand)
-
-        # -------------------
-        # merge
-        # -------------------
-        return torch.cat(outputs, dim=0)
