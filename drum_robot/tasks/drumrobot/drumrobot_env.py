@@ -500,8 +500,8 @@ class DrumRobotEnv(DirectRLEnv):
     """ func (_get_dones) """
     def _compute_tip_position(self):
         # 스틱 링크의 월드 좌표계 위치 가져오기
-        all_body_pos = self.robot.data.body_pos_w,      # (num_envs, num_bodies, 3)
-        all_body_quat = self.robot.data.body_quat_w,    # (num_envs, num_bodies, 4)  (w,x,y,z)인 경우가 많음
+        all_body_pos = self.robot.data.body_pos_w       # (num_envs, num_bodies, 3)
+        all_body_quat = self.robot.data.body_quat_w     # (num_envs, num_bodies, 4)  (w,x,y,z)인 경우가 많음
 
         L_wrist_pos = all_body_pos[:, self.left_stick_idx]      # (num_envs, 3)
         R_wrist_pos = all_body_pos[:, self.right_stick_idx]
