@@ -122,6 +122,7 @@ class RDS:
         self.cfg = cfg
         self.env = env
 
+        # midi
         random.seed(time.time_ns())
         self.rng = random.Random()
 
@@ -136,6 +137,9 @@ class RDS:
 
         self.rds = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
         self.rds_visit = torch.zeros((N, T, M), device=self.device, dtype=torch.bool)
+
+        # util
+        self.env_arange = torch.arange(self.env.num_envs, device=self.device)
     
     def get_next_hits(self, step, num_hits):
         """
@@ -209,8 +213,7 @@ class RDS:
         return next_hits
     
     def set_rds_visit(self, steps, hit_mask):
-        env_arange = torch.arange(self.env.num_envs, device=self.device)
-        self.rds_visit[env_arange, steps, :] = hit_mask    # 타격한 시간에 방문 처리
+        self.rds_visit[self.env_arange, steps, :] = hit_mask    # 타격한 시간에 방문 처리
 
     def get_rds(self):
         return self.rds

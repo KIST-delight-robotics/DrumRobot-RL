@@ -142,7 +142,7 @@ class IKSolver:
 
         # nan 체크
         nan_bad = torch.isnan(out[:, :9]).any(dim=-1)
-        out[nan_bad, 9] = 1.0
+        err[nan_bad] = 1.0
 
         # (우측/좌측 중 하나라도 sqrt_bad면 해당 row를 에러상태로 강제)
         sqrt_bad = sqrt_bad_r | sqrt_bad_l

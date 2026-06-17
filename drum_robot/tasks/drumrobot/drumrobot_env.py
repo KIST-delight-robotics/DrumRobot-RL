@@ -3,24 +3,25 @@ from __future__ import annotations
 import torch
 from typing import Sequence
 import math
-from isaaclab.utils import math as math_utils
+
+import numpy as np
+import gymnasium as gym
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation, ArticulationCfg
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
+from isaaclab.utils import math as math_utils
 
 from .drumrobot_cfg import DrumRobotEnvCfg
 from .components.specs import EnvSpec, RobotSpec
 from .components.robotic_drum_score import RDSCfg, RDS
 from .components.robot_initializer import RobotInitializerCfg, RobotInitializer
+from .components.hit_detector import HitDetector, HitDetectorCfg
 from .components.reward import RewardComputerCfg, RewardComputer
 from .components.visualizer import VisualizerCfg, Visualizer
 
 from drum_robot.utils.logger import EnvLogger, LoggerCfg
-
-import numpy as np
-import gymnasium as gym
 
 
 class DrumRobotEnv(DirectRLEnv):
@@ -54,7 +55,11 @@ class DrumRobotEnv(DirectRLEnv):
         )
 
         # 로그
-        self.logger = EnvLogger(self.num_envs, self.device, LoggerCfg(interval=2000, sample_env_id=0))
+        self.logger = EnvLogger(
+            num_envs=self.num_envs,
+            device=self.device,
+            cfg=LoggerCfg(interval=2000, sample_env_id=0),
+        )
         
         # RDS
         self.rds = RDS(
@@ -65,8 +70,8 @@ class DrumRobotEnv(DirectRLEnv):
 
         # 로봇 초기 위치 initializer
         self.robot_initializer = RobotInitializer(
-            self.device,
-            RobotInitializerCfg(
+            device=self.device,
+            cfg=RobotInitializerCfg(
                 num_ctrl_joint=len(self.ctrl_joint_names),
                 height_above_drum=0.1,
                 joint_noise_scale= 5*math.pi/180
@@ -76,8 +81,19 @@ class DrumRobotEnv(DirectRLEnv):
             robot=RobotSpec(),
         )
 
+        # 타격 감지
+        self.hit_detector = HitDetector(
+            device=self.device,
+            cfg=HitDetectorCfg(),
+            env=env_specs,
+        )
+
         # 보상 계산
-        self.reward_computer = RewardComputer(self.device, RewardComputerCfg())
+        self.reward_computer = RewardComputer(
+            device=self.device,
+            cfg=RewardComputerCfg(),
+            env=env_specs,
+        )
 
         # 시각화
         self.visualizer = Visualizer(
@@ -157,64 +173,40 @@ class DrumRobotEnv(DirectRLEnv):
         self.robot.set_joint_position_target(self.target_joint_pos, joint_ids=self.ctrl_joint_ids)
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # 팁 위치
-        tip_pos = self._compute_tip_position()          # (N, 2, 3)
-        
-        # 팁 속도
-        prev_tip_pos = self.tip_pos
-        prev_tip_vel = self.tip_vel
-        alpha = 0.9
-        tip_vel = self._compute_tip_velocity(tip_pos, prev_tip_pos, prev_tip_vel, alpha)
-
-        # 팁 드럼 거리 계산
-        inst_pos = self.inst_pos
-        dist_xy_sq, diff_z = self._compute_tip_drum_dist_sq(tip_pos, inst_pos)
-
-        # 접촉 확인
-        contact_mask = self._check_contact_drum(dist_xy_sq, diff_z)
-
-        # 타격 판정
-        hit_armed = self.hit_armed
-        hit_per_arm = self._check_hitting(
-            contact_mask=contact_mask,
-            hit_armed=hit_armed,
-            tip_vel=tip_vel,
-            diff_z=diff_z,
-        )   # (N, 2, M)
-        
-        # 양팔 중 하나라도 해당 drum을 strike하면 hit
-        hit_mask = torch.any(hit_per_arm, dim=1)   # (N, M)
-
-        # 타격 시간 기록
-        steps = self.steps
-        self.rds.set_rds_visit(steps, hit_mask)
-
-        # 잘못친 타격 판정
         rds = self.rds.get_rds()
         rds_visit = self.rds.get_rds_visit()
-        wrong_hit = self._detect_wrong_hits(hit_mask, rds, steps)
 
-        # 윈도우 끝났을 때 타격 성공 확인
-        success, missed_target, time_error = self._finalize_target_outcomes(
-            rds=rds,
-            rds_visit=rds_visit,
-            steps=steps,
+        # 팁 위치
+        tip_pos = self._compute_tip_position()   # (N, 2, 3)
+
+        (
+            hit_mask,
+            tip_pos, tip_vel, prev_tip_pos, next_hit_armed,
+            success, wrong_hit, missed_target, time_error,
+            hit_per_arm,
+        ) = self.hit_detector.detect(
+            tip_pos,
+            self.inst_pos,
+            self.hit_armed,
+            self.steps,
+            rds,
+            rds_visit,
         )
 
-        # re-arm 확인
-        next_hit_armed = self._check_rearm(hit_armed, hit_per_arm, contact_mask, diff_z)
-        
+        # 타격 시간 기록
+        self.rds.set_rds_visit(self.steps, hit_mask)
+
+        # reward 로 넘기는 결과값
         self.tip_pos = tip_pos
         self.tip_vel = tip_vel
         self.prev_tip_pos = prev_tip_pos
         self.hit_armed = next_hit_armed
 
-        # reward 로 넘기는 결과값
         self.success = success
         self.wrong_hit = wrong_hit
         self.missed_target = missed_target
         self.time_error = time_error
-        self.hit_armed_for_reward = hit_armed
+        self.hit_armed_for_reward = self.hit_armed
 
         # episode time out
         self.steps = self.steps + 1
@@ -287,6 +279,10 @@ class DrumRobotEnv(DirectRLEnv):
         joint_vel = torch.zeros_like(default_joint_vel)
         
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+
+        # tip 리셋
+        tip_pos = self._compute_tip_position()
+        self.hit_detector.reset(env_ids, tip_pos)
 
         # 텐서 변수들 리셋
         self._reset_tensors(env_ids)
@@ -421,15 +417,7 @@ class DrumRobotEnv(DirectRLEnv):
 
     def _alloc_buffers(self):
         N = self.num_envs
-        T = self.episode_length_step
         M = self.num_drums
-
-        # 로봇의 tip 위치를 저장할 텐서
-        self.tip_pos = torch.zeros((N, 2, 3), device=self.device)
-        self.prev_tip_pos = torch.zeros((N, 2, 3), device=self.device)
-
-        # 로봇의 tip 속도 저장할 텐서
-        self.tip_vel = torch.zeros((N, 2, 3), device=self.device)
 
         # 각 env/각 에피소드에서 악기 위치
         inst_pos = self.basic_inst_pos.unsqueeze(0).repeat(N, 1, 1)    # (M, 3) -차원 추가-> (1, M, 3) -복제-> (N, M, 3)
@@ -508,12 +496,12 @@ class DrumRobotEnv(DirectRLEnv):
         )
         
         return obs
-
+    
     """ func (_get_dones) """
     def _compute_tip_position(self):
         # 스틱 링크의 월드 좌표계 위치 가져오기
-        all_body_pos = self.robot.data.body_pos_w      # (num_envs, num_bodies, 3)
-        all_body_quat = self.robot.data.body_quat_w    # (num_envs, num_bodies, 4)  (w,x,y,z)인 경우가 많음
+        all_body_pos = self.robot.data.body_pos_w,      # (num_envs, num_bodies, 3)
+        all_body_quat = self.robot.data.body_quat_w,    # (num_envs, num_bodies, 4)  (w,x,y,z)인 경우가 많음
 
         L_wrist_pos = all_body_pos[:, self.left_stick_idx]      # (num_envs, 3)
         R_wrist_pos = all_body_pos[:, self.right_stick_idx]
@@ -531,148 +519,6 @@ class DrumRobotEnv(DirectRLEnv):
         tip_pos = torch.stack([L_tip, R_tip], dim=1)   # (num_envs, 2, 3)
 
         return tip_pos
-    
-    def _compute_tip_velocity(self, tip_pos, prev_tip_pos, prev_tip_vel, alpha):
-        tip_vel = (tip_pos - prev_tip_pos) / self.dt
-
-        tip_vel_f = (1 - alpha) * tip_vel + alpha * prev_tip_vel
-
-        return tip_vel_f
-    
-    def _compute_tip_drum_dist_sq(self, tip_pos, inst_pos):
-        # tip_pos: (N, 2, 3), inst_pos: (N, M, 3)
-        # N: num env, M: num drum
-
-        diff_xy = tip_pos[:, :, None, 0:2] - inst_pos[:, None, :, 0:2] # (N, 2, M, 2)
-
-        dist_xy_sq = torch.sum(diff_xy * diff_xy, dim=-1)    # (N, 2, M)
-
-        diff_z = tip_pos[:, :, None, 2] - inst_pos[:, None, :, 2] # (N, 2, M)
-
-        return dist_xy_sq, diff_z
-    
-    def _check_contact_drum(self, dist_xy_sq, diff_z):
-        # N: num env, M: num drum
-        # xy 범위 확인
-        radius_sq = self.cfg.drum_xy_radius ** 2
-        in_xy_range = dist_xy_sq <= radius_sq   # (N, 2, M)
-
-        # z 높이 확인
-        in_z_range = (diff_z <= self.cfg.drum_z_range) & (diff_z >= 0.0)    # (N, 2, M)
-
-        contact_mask = in_xy_range & in_z_range
-
-        return contact_mask
-
-    def _check_hitting(self, contact_mask, hit_armed, tip_vel, diff_z):
-        # contact_mask: (N, 2, M)
-        # hit_armed:    (N, 2, M)
-        # tip_vel:      (N, 2, 3)
-        # diff_z:       (N, 2, M)
-
-        # 아래 방향 속도 조건
-        tip_vel_z = tip_vel[:, :, 2].unsqueeze(-1)   # (N, 2, 1)
-        is_downward = tip_vel_z < (-self.cfg.min_impact_velocity)   # (N, 2, 1), broadcast 가능
-
-        # strike candidate
-        hit_per_arm = contact_mask & hit_armed & is_downward   
-
-        return hit_per_arm
-
-    def _detect_wrong_hits(self, hit_mask, rds, steps):
-        # hit_mask: (N, M)
-        # rds: (N, T, M)
-        # steps: (N,)
-
-        N = self.num_envs
-        T = self.episode_length_step
-        M = self.num_drums
-        W = self.cfg.hit_window_step
-
-        window_target_union = torch.zeros((N, M), device=self.device, dtype=torch.bool)
-
-        for offset in range(-W, W + 1):
-            cand_steps = steps + offset
-            valid = (cand_steps >= 0) & (cand_steps < T)
-            cand_steps_clamped = cand_steps.clamp(0, T - 1)
-
-            target_mask = rds[self.env_arange, cand_steps_clamped, :] > 0.5     # (N, M)
-            target_mask &= valid.unsqueeze(-1)
-
-            window_target_union |= target_mask
-
-        wrong_hit = hit_mask & (~window_target_union)
-
-        return wrong_hit
-
-    def _finalize_target_outcomes(self, rds, rds_visit, steps):
-        # rds, rds_visit: (N, T, M)
-        # steps: (N,)
-
-        N = self.num_envs
-        T = self.episode_length_step
-        M = self.num_drums
-        W = self.cfg.hit_window_step
-
-        success = torch.zeros((N, M), device=self.device, dtype=torch.bool)
-        time_error = torch.full((N, M), -1, device=self.device, dtype=torch.int64)
-
-        # 윈도우 왼쪽 끝 스텝
-        window_end_step = steps - W
-        valid = (window_end_step >= 0) & (window_end_step < T)
-        window_end_step = window_end_step.clamp(0, T - 1)
-
-        target_mask = (rds[self.env_arange, window_end_step, :] > 0.5)
-        target_mask &= valid.unsqueeze(-1)     # (N, M)
-
-        offsets = self._get_hit_window_offsets(W)
-        for offset in offsets:
-            cand_steps = window_end_step + offset
-            valid = (cand_steps >= 0) & (cand_steps < T)
-            cand_steps_clamped = cand_steps.clamp(0, T - 1)
-
-            hit_mask = rds_visit[self.env_arange, cand_steps_clamped, :] > 0.5  # (N, M)
-
-            match_mask = hit_mask & valid.unsqueeze(-1) & target_mask & (~success)
-            success |= match_mask
-
-            time_error[match_mask] = abs(offset)  # step 차이
-        
-        missed_target = target_mask & (~success)
-        
-        return success, missed_target, time_error
-
-    def _get_hit_window_offsets(self, W):
-        offsets = [0]
-        for i in range(1, W + 1):
-            offsets.append(-i)
-            offsets.append(i)
-
-        return offsets
-
-    def _check_rearm(self, hit_armed, hit_per_arm, contact_mask, diff_z):
-        """
-        준비
-
-        Args:
-            hit_armed:  (N, 2, M)   # 이전 준비 상태
-            contact_mask: (N, 2, M) # 접촉 여부
-            diff_z: (N, 2, M)       # z 거리
-
-        Returns:
-            next_hit_armed: (N, 2, M)
-        """
-        next_hit_armed = hit_armed.clone()
-
-        # 충분히 벗어나고 올라가면 rearm
-        rearm_mask = diff_z > self.cfg.rearm_height
-        next_hit_armed[rearm_mask] = True
-
-        # 접촉 중이면 disarm
-        contact_expanded = contact_mask.any(dim=2, keepdim=True)  # (N,2,1)
-        next_hit_armed = next_hit_armed.masked_fill(contact_expanded, False)
-
-        return next_hit_armed
 
     """ func (_reset_idx) """
     def _get_init_joint_pos(self, env_ids, default_joint_pos):
@@ -685,14 +531,8 @@ class DrumRobotEnv(DirectRLEnv):
         return joint_pos
 
     def _reset_tensors(self, env_ids):
-        # 팁 위치/속도 리셋
-        tip_pos = self._compute_tip_position()
-        self.tip_pos[env_ids] = tip_pos[env_ids]
-        self.prev_tip_pos[env_ids] = tip_pos[env_ids]
-        self.tip_vel[env_ids] = 0.0
-
         # 타격 상태 버퍼 리셋
-        self.hit_armed[env_ids] = True  # 초기 위치는 악기 높이 차이 상관 없이 타격 가능
+        self.hit_armed[env_ids] = True  # 초기 상태는 악기 높이 차이 상관 없이 타격 준비 상태로 초기화
 
         # 스텝 리셋
         self.steps[env_ids] = 0 # torch.randint(0, 9, (len(env_ids),), device=self.device)

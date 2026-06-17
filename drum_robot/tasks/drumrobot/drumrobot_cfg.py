@@ -127,13 +127,7 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     # 타격 관측
     max_lookahead_time: float = 1.0    # 최대 관측 범위
     num_hits: int = 3      # 최대 관측 타격 개수
-
-    # 타격 판정
-    drum_xy_radius: float = 0.13      # 0.15 → 0.13
-    drum_z_range: float = 0.07        # 0.10 → 0.07
-    min_impact_velocity: float = 0.2  # 0.1 → 0.2
-    rearm_height: float = 0.18        # 0.15 → 0.18
-    hit_window_step: int = 10       # 일단 유지
+    hit_window_step: int = 10
 
     """ 시각화 설정 """
     enable_visualization: bool = False
