@@ -63,10 +63,9 @@ GENERAL_MIDI_PERCUSSION_KEY_MAP = {
     58: "58",
 }
 
-MIDI_FOLDER_PATH = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/MIDIs"
-
 @dataclass
 class RdsInitializerCfg:
+    midi_folder_path = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/MIDIs"
 
     # 에피소드 시간
     episode_length_s: float = 5.0
@@ -136,7 +135,7 @@ class RdsInitializer:
         self.score = self._compute_score(self.rds)                     # (N,)
     
     def _glob_midi_files(self):
-        folder = Path(MIDI_FOLDER_PATH)
+        folder = Path(self.cfg.midi_folder_path)
         midi_files = list(folder.glob("*.mid"))
 
         if not midi_files:
