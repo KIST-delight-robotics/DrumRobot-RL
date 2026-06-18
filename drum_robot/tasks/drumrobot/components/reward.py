@@ -11,6 +11,26 @@ from .specs import EnvRuntimeSpec, Instruments
 
 # === 모듈 레벨 jit 함수들 ===
 @torch.jit.script
+def _goal_terms(
+        success: torch.Tensor,
+        wrong_hit: torch.Tensor,
+        missed_target: torch.Tensor,
+        time_error: torch.Tensor,
+        w_drum_success: torch.Tensor,
+        k_accuracy: float,
+):
+    success_reward = (success.float() * w_drum_success).sum(dim=-1)
+    wrong_cost   = wrong_hit.float().sum(dim=-1)
+    missed_cost  = missed_target.float().sum(dim=-1)
+
+    valid_mask = time_error >= 0
+    time_accuracy_reward = torch.exp(-k_accuracy * time_error)
+    time_accuracy_reward[~valid_mask] = 0
+    time_accuracy_reward = time_accuracy_reward.sum(dim=-1)
+
+    return success_reward, wrong_cost, missed_cost, time_accuracy_reward
+
+@torch.jit.script
 def compute_arm_target_assignment(
         target_mask: torch.Tensor,  # (N, M)
         drum_pos: torch.Tensor,     # (N, M, 3)
@@ -140,59 +160,18 @@ def compute_arm_target_assignment(
     return cost, upward_reward, downward_reward
 
 @torch.jit.script
-def compute_reward_terms(
-        success: torch.Tensor,          # (N, M)
-        wrong_hit: torch.Tensor,        # (N, M)
-        missed_target: torch.Tensor,    # (N, M)
-        time_error: torch.Tensor,       # (N, M)
-
-        left_tip_pos: torch.Tensor,     # (N, 3) [m]
-        right_tip_pos: torch.Tensor,    # (N, 3) [m]
+def _proximity_terms(
+        left_tip_pos: torch.Tensor,
+        right_tip_pos: torch.Tensor,
         prev_left_tip_pos: torch.Tensor,
         prev_right_tip_pos: torch.Tensor,
-        drum_pos: torch.Tensor,         # (N, M, 3) [m]
-        next_hits: torch.Tensor,        # (N, K, M+2)
-
-        tip_vel: torch.Tensor,          # (N, 2, 3)
-        hit_armed: torch.Tensor,        # (N, 2, M)
-
-        joint_vel: torch.Tensor,        # (N, num_joints) [rad/s]
-        action: torch.Tensor,           # (N, 9) [-1,1]
-        robot_pos: torch.Tensor,        # (N, 9) [rad]
-        joint_low: torch.Tensor,        # (1, 9) [rad]
-        joint_high: torch.Tensor,       # (1, 9) [rad]
-
-        w_drum_success: torch.Tensor,   # (1, M)
-
-        k_accuracy: float,
+        drum_pos: torch.Tensor,
+        next_hits: torch.Tensor,
+        tip_vel: torch.Tensor,
+        hit_armed: torch.Tensor,
         k_time_to_hit: float,
-        limit_margin: float,
-
-        x_limit: float,
-        y_limit_l: float,
-        y_limit_h: float,
-        z_limit: float,
-        drum_xy_margin: float,
-        drum_z_margin: float,
 ):
-    # -------------------------------------------------
-    # goal terms
-    # -------------------------------------------------
-    success_reward = (
-        success.float() * w_drum_success            # (N, M)
-    ).sum(dim=-1)                                   # (N,)
-    wrong_cost = wrong_hit.float().sum(dim=-1)      # (N,)
-    missed_cost = missed_target.float().sum(dim=-1) # (N,)
-
-    valid_mask = time_error >= 0
-    time_accuracy_reward = torch.exp(-k_accuracy * time_error)
-    time_accuracy_reward[~valid_mask] = 0
-    time_accuracy_reward = time_accuracy_reward.sum(dim=-1)
-
-    # -------------------------------------------------
-    # proximity terms: nearest imminent target only
-    # -------------------------------------------------
-    _, M, _ = drum_pos.shape
+    M = drum_pos.shape[1]
 
     nearest_target_mask = next_hits[:, 0, :M] > 0.5
     first_time = next_hits[:, 0, M]
@@ -205,7 +184,6 @@ def compute_reward_terms(
         tip_vel=tip_vel,
         hit_armed=hit_armed,
     )
-
     prev_cost, _, _ = compute_arm_target_assignment(
         target_mask=nearest_target_mask,
         drum_pos=drum_pos,
@@ -218,44 +196,60 @@ def compute_reward_terms(
     proximity_cost = torch.exp(-k_time_to_hit * first_time) * curr_cost
     progress_reward = prev_cost - curr_cost
 
-    # -------------------------------------------------
-    # tip position penalties
-    # -------------------------------------------------
+    return proximity_cost, progress_reward, upward_reward, downward_reward
 
+@torch.jit.script
+def _tip_position_penalties(
+        left_tip_pos: torch.Tensor,
+        right_tip_pos: torch.Tensor,
+        drum_pos: torch.Tensor,
+        x_limit: float,
+        y_limit_l: float,
+        y_limit_h: float,
+        z_limit: float,
+        drum_xy_margin: float,
+        drum_z_margin: float,
+):
     tip_limit_pen = (
         (left_tip_pos[:, 0] > x_limit)
         | (left_tip_pos[:, 0] < -x_limit)
         | (left_tip_pos[:, 1] < y_limit_l)
         | (left_tip_pos[:, 1] > y_limit_h)
         | (left_tip_pos[:, 2] < z_limit)
-
         | (right_tip_pos[:, 0] > x_limit)
         | (right_tip_pos[:, 0] < -x_limit)
         | (right_tip_pos[:, 1] < y_limit_l)
         | (right_tip_pos[:, 1] > y_limit_h)
         | (right_tip_pos[:, 2] < z_limit)
-    )
+    ).float()  # bool → float로 미리 캐스팅 (jit가 dtype 추론 안정적)
 
-    diff_xy_l = left_tip_pos[:, None, 0:2] - drum_pos[:, :, 0:2]    # (N, M, 2)
+    diff_xy_l = left_tip_pos[:, None, 0:2] - drum_pos[:, :, 0:2]
     diff_xy_r = right_tip_pos[:, None, 0:2] - drum_pos[:, :, 0:2]
-
-    diff_z_l = left_tip_pos[:, None, 2] - drum_pos[:, :, 2]  # (N, M)
+    diff_z_l = left_tip_pos[:, None, 2] - drum_pos[:, :, 2]
     diff_z_r = right_tip_pos[:, None, 2] - drum_pos[:, :, 2]
 
-    dist_xy_l = torch.sum(diff_xy_l * diff_xy_l, dim=-1)     # (N, M)
+    dist_xy_l = torch.sum(diff_xy_l * diff_xy_l, dim=-1)
     dist_xy_r = torch.sum(diff_xy_r * diff_xy_r, dim=-1)
 
     in_xy_l = dist_xy_l <= drum_xy_margin ** 2
     in_xy_r = dist_xy_r <= drum_xy_margin ** 2
-    
+
     under_drum_l = in_xy_l & (diff_z_l < -drum_z_margin)
     under_drum_r = in_xy_r & (diff_z_r < -drum_z_margin)
 
     under_drum_pen = under_drum_l.float().sum(dim=-1) + under_drum_r.float().sum(dim=-1)
 
-    # -------------------------------------------------
-    # global penalties
-    # -------------------------------------------------
+    return tip_limit_pen, under_drum_pen
+
+@torch.jit.script
+def _global_penalties(
+        joint_vel: torch.Tensor,
+        action: torch.Tensor,
+        robot_pos: torch.Tensor,
+        joint_low: torch.Tensor,
+        joint_high: torch.Tensor,
+        limit_margin: float,
+):
     action_l2 = torch.sum(action * action, dim=-1)
     joint_vel_l2 = torch.sum(joint_vel * joint_vel, dim=-1)
 
@@ -263,12 +257,7 @@ def compute_reward_terms(
     high_v = torch.clamp(robot_pos - (joint_high - limit_margin), min=0.0)
     limit_pen = torch.sum(low_v * low_v + high_v * high_v, dim=-1)
 
-    return (
-        success_reward, wrong_cost, missed_cost, time_accuracy_reward,
-        proximity_cost, progress_reward,
-        upward_reward, downward_reward,
-        action_l2, joint_vel_l2, limit_pen, tip_limit_pen, under_drum_pen,
-    )
+    return action_l2, joint_vel_l2, limit_pen
 
 @torch.jit.script
 def compute_rewards(
@@ -396,45 +385,50 @@ class RewardComputer:
             joint_low: torch.Tensor,
             joint_high: torch.Tensor,
     ):
-        (
-            success_reward, wrong_cost, missed_cost, time_accuracy_reward,
-            proximity_cost, progress_reward,
-            upward_reward, downward_reward,
-            action_l2, joint_vel_l2, limit_pen, tip_limit_pen, under_drum_pen,
-        ) = compute_reward_terms(
+        # goal
+        success_reward, wrong_cost, missed_cost, time_accuracy_reward = _goal_terms(
             success=success,
             wrong_hit=wrong_hit,
             missed_target=missed_target,
             time_error=time_error,
+            w_drum_success=self.w_drum_success,
+            k_accuracy=self.cfg.k_accuracy,
+        )
 
+        # proximity / progress / arm assignment
+        proximity_cost, progress_reward, upward_reward, downward_reward = _proximity_terms(
             left_tip_pos=tip_pos[:, 0, :],
             right_tip_pos=tip_pos[:, 1, :],
             prev_left_tip_pos=prev_tip_pos[:, 0, :],
             prev_right_tip_pos=prev_tip_pos[:, 1, :],
             drum_pos=drum_pos,
             next_hits=next_hits,
-
             tip_vel=tip_vel,
             hit_armed=prev_hit_armed,
-
-            joint_vel=robot_vel,
-            action=actions,
-            robot_pos=robot_pos,
-            joint_low=joint_low,
-            joint_high=joint_high,
-
-            w_drum_success=self.w_drum_success,
-
-            k_accuracy=self.cfg.k_accuracy,
             k_time_to_hit=self.cfg.k_time_to_hit,
-            limit_margin=self.cfg.limit_margin,
+        )
 
+        # tip position penalties
+        tip_limit_pen, under_drum_pen = _tip_position_penalties(
+            left_tip_pos=tip_pos[:, 0, :],
+            right_tip_pos=tip_pos[:, 1, :],
+            drum_pos=drum_pos,
             x_limit=self.cfg.x_limit,
             y_limit_l=self.cfg.y_limit_l,
             y_limit_h=self.cfg.y_limit_h,
             z_limit=self.cfg.z_limit,
             drum_xy_margin=self.cfg.drum_xy_margin,
             drum_z_margin=self.cfg.drum_z_margin,
+        )
+
+        # global penalties
+        action_l2, joint_vel_l2, limit_pen = _global_penalties(
+            joint_vel=robot_vel,
+            action=actions,
+            robot_pos=robot_pos,
+            joint_low=joint_low,
+            joint_high=joint_high,
+            limit_margin=self.cfg.limit_margin,
         )
 
         reward = compute_rewards(
