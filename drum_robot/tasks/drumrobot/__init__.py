@@ -1,6 +1,6 @@
 from __future__ import annotations
-
-import gymnasium as gym
+                        # 실제 패키지 누락이 아니라 Isaac Sim이 런타임에서 import path를 추가하는 구조 때문
+import gymnasium as gym # pyright: ignore[reportMissingImports]
 
 from . import agents
 

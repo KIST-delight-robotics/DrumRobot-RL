@@ -1,12 +1,12 @@
 from __future__ import annotations
-
-from isaaclab.assets import ArticulationCfg
-from isaaclab.envs import DirectRLEnvCfg
-from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import SimulationCfg
-from isaaclab.utils import configclass
-import isaaclab.sim as sim_utils
-from isaaclab.actuators import ImplicitActuatorCfg
+                                                    # 실제 패키지 누락이 아니라 Isaac Sim이 런타임에서 import path를 추가하는 구조 때문
+from isaaclab.assets import ArticulationCfg         # pyright: ignore[reportMissingImports]
+from isaaclab.envs import DirectRLEnvCfg            # pyright: ignore[reportMissingImports]
+from isaaclab.scene import InteractiveSceneCfg      # pyright: ignore[reportMissingImports]
+from isaaclab.sim import SimulationCfg              # pyright: ignore[reportMissingImports]
+from isaaclab.utils import configclass              # pyright: ignore[reportMissingImports]
+import isaaclab.sim as sim_utils                    # pyright: ignore[reportMissingImports]
+from isaaclab.actuators import ImplicitActuatorCfg  # pyright: ignore[reportMissingImports]
 
 import math # pi
 from dataclasses import dataclass, field

@@ -1,17 +1,15 @@
 from __future__ import annotations
-
-import torch
+                                                                # 실제 패키지 누락이 아니라 Isaac Sim이 런타임에서 import path를 추가하는 구조 때문
+import torch                                                    # pyright: ignore[reportMissingImports]
 from typing import Sequence
-import math
 
-import numpy as np
-import gymnasium as gym
+import numpy as np                                              # pyright: ignore[reportMissingImports]
+import gymnasium as gym                                         # pyright: ignore[reportMissingImports]
 
-import isaaclab.sim as sim_utils
-from isaaclab.assets import Articulation, ArticulationCfg
-from isaaclab.envs import DirectRLEnv
-from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils import math as math_utils
+import isaaclab.sim as sim_utils                                # pyright: ignore[reportMissingImports]
+from isaaclab.assets import Articulation, ArticulationCfg       # pyright: ignore[reportMissingImports]
+from isaaclab.envs import DirectRLEnv                           # pyright: ignore[reportMissingImports]
+from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane     # pyright: ignore[reportMissingImports]
 
 from .drumrobot_cfg import DrumRobotEnvCfg
 from .components.specs import EnvSpec, Instruments

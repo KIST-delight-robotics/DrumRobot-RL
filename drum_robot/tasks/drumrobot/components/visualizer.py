@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import torch
-
-import isaaclab.sim as sim_utils
-import omni.usd
+                                    # 실제 패키지 누락이 아니라 Isaac Sim이 런타임에서 import path를 추가하는 구조 때문
+import torch                        # pyright: ignore[reportMissingImports]
+import isaaclab.sim as sim_utils    # pyright: ignore[reportMissingImports]
+import omni.usd                     # pyright: ignore[reportMissingImports]
 from pxr import UsdGeom, Gf
 
 from .specs import EnvSpec, Instruments
