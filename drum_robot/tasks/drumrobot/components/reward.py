@@ -502,10 +502,10 @@ class RewardComputer:
     
     def update_difficulty_weights(
             self,
-            is_update: bool,
             success: torch.Tensor,
             missed_target: torch.Tensor,
     ):
+        is_update = False
         # 어려운 드럼에 더 큰 가중치
         if is_update:
             eps = 1e-6

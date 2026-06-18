@@ -41,7 +41,6 @@ class HitDetector:
             self,
             tip_pos,
             drum_pos,
-            hit_armed,
     ):
         # 팁 속도
         alpha = self.cfg.alpha
@@ -58,7 +57,7 @@ class HitDetector:
         # 타격 판정
         hit_per_arm = self._check_hitting(
             contact_mask=contact_mask,
-            hit_armed=hit_armed,
+            hit_armed=self.hit_armed,
             tip_vel=tip_vel,
             diff_z=diff_z,
         )   # (N, 2, M)
@@ -67,17 +66,19 @@ class HitDetector:
         hit_mask = torch.any(hit_per_arm, dim=1)   # (N, M)
 
         # re-arm 확인
-        next_hit_armed = self._check_rearm(hit_armed, contact_mask, diff_z)
-
-        # 
+        prev_hit_armed = self.hit_armed
+        hit_armed = self._check_rearm(prev_hit_armed, contact_mask, diff_z)
+        
+        # 기록
         self.tip_pos = tip_pos
         self.prev_tip_pos = prev_tip_pos
         self.tip_vel = tip_vel
+        self.hit_armed = hit_armed
 
         return (
             hit_mask,
-            tip_vel, prev_tip_pos, next_hit_armed,
-            hit_per_arm,
+            tip_vel, prev_tip_pos,
+            prev_hit_armed, hit_per_arm,
         )
     
     def get_result(self, hit_mask, steps, rds, rds_visit):
@@ -98,9 +99,16 @@ class HitDetector:
         self.tip_pos[env_ids] = tip_pos[env_ids]
         self.prev_tip_pos[env_ids] = tip_pos[env_ids]
         self.tip_vel[env_ids] = 0.0
+
+        # 타격 상태 버퍼 리셋
+        self.hit_armed[env_ids] = True  # 초기 상태는 준비 안됨. 이 후 스텝에서 갱신
+
+    def get_value_for_obs(self):
+        return self.tip_pos, self.hit_armed
     
     def _alloc_buffers(self):
         N = self.env.num_envs
+        M = self.num_drums
 
         # 로봇의 tip 위치를 저장할 텐서
         self.tip_pos = torch.zeros((N, 2, 3), device=self.device)
@@ -108,6 +116,9 @@ class HitDetector:
 
         # 로봇의 tip 속도 저장할 텐서
         self.tip_vel = torch.zeros((N, 2, 3), device=self.device)
+
+        # 타격 상태 버퍼
+        self.hit_armed = torch.ones((N, 2, M), device=self.device, dtype=torch.bool)
     
     def _compute_tip_velocity(self, tip_pos, prev_tip_pos, prev_tip_vel, alpha):
         tip_vel = (tip_pos - prev_tip_pos) / self.env.step_dt
@@ -227,19 +238,19 @@ class HitDetector:
 
         return offsets
 
-    def _check_rearm(self, hit_armed, contact_mask, diff_z):
+    def _check_rearm(self, prev_hit_armed, contact_mask, diff_z):
         """
         준비
 
         Args:
-            hit_armed:  (N, 2, M)   # 이전 준비 상태
-            contact_mask: (N, 2, M) # 접촉 여부
-            diff_z: (N, 2, M)       # z 거리
+            prev_hit_armed: (N, 2, M) # 이전 준비 상태
+            contact_mask:   (N, 2, M) # 접촉 여부
+            diff_z:         (N, 2, M) # z 거리
 
         Returns:
             next_hit_armed: (N, 2, M)
         """
-        next_hit_armed = hit_armed.clone()
+        next_hit_armed = prev_hit_armed.clone()
 
         # 충분히 벗어나고 올라가면 rearm
         rearm_mask = diff_z > self.cfg.rearm_height
