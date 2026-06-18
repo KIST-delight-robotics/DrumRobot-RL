@@ -7,7 +7,7 @@ Script to play a checkpoint of an RL agent from skrl.
 import argparse
 import sys
 
-from isaaclab.app import AppLauncher
+from isaaclab.app import AppLauncher                                                                    # type: ignore[arg-type]
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Play a checkpoint of an RL agent from skrl.")
@@ -70,10 +70,10 @@ import os
 import random
 import time
 
-import gymnasium as gym
+import gymnasium as gym                                                                                 # type: ignore[arg-type]
 import skrl
-import torch
-from packaging import version
+import torch                                                                                            # type: ignore[arg-type]
+from packaging import version                                                                           # type: ignore[arg-type]
 import drum_robot   # 사용자 패키지를 강제로 로드하여 gym.register 실행
 
 # check for minimum supported skrl version
@@ -86,25 +86,25 @@ if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     exit()
 
 if args_cli.ml_framework.startswith("torch"):
-    from skrl.utils.runner.torch import Runner
+    from skrl.utils.runner.torch import Runner                                                          # type: ignore[arg-type]
 elif args_cli.ml_framework.startswith("jax"):
-    from skrl.utils.runner.jax import Runner
+    from skrl.utils.runner.jax import Runner                                                            # type: ignore[arg-type]
 
-from isaaclab.envs import (
+from isaaclab.envs import (                                                                             # type: ignore[arg-type]
     DirectMARLEnv,
     DirectMARLEnvCfg,
     DirectRLEnvCfg,
     ManagerBasedRLEnvCfg,
     multi_agent_to_single_agent,
 )
-from isaaclab.utils.dict import print_dict
+from isaaclab.utils.dict import print_dict                                                              # type: ignore[arg-type]
 
-from isaaclab_rl.skrl import SkrlVecEnvWrapper
-from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+from isaaclab_rl.skrl import SkrlVecEnvWrapper                                                          # type: ignore[arg-type]
+from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint                 # type: ignore[arg-type]
 
-import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils import get_checkpoint_path
-from isaaclab_tasks.utils.hydra import hydra_task_config
+import isaaclab_tasks  # noqa: F401                                                                     # type: ignore[arg-type]
+from isaaclab_tasks.utils import get_checkpoint_path                                                    # type: ignore[arg-type]
+from isaaclab_tasks.utils.hydra import hydra_task_config                                                # type: ignore[arg-type]
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 

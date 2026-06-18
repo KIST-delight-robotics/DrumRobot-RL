@@ -236,6 +236,7 @@ class HitDetector:
         return success, missed_target, time_error
 
     def _get_hit_window_offsets(self, W: int) -> list:
+        # offset 순서: [0, -1, +1, -2, +2, ...] 마스크가 "가장 작은 |offset|부터 매칭"되도록
         offsets = [0]
         for i in range(1, W + 1):
             offsets.append(-i)

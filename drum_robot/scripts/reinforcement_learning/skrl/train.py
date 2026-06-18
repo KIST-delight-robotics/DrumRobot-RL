@@ -7,7 +7,7 @@ Script to train RL agent with skrl.
 import argparse
 import sys
 
-from isaaclab.app import AppLauncher
+from isaaclab.app import AppLauncher                                                                                # type: ignore[arg-type]
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
@@ -72,16 +72,10 @@ import random
 import time
 from datetime import datetime
 
-import gymnasium as gym
+import gymnasium as gym                                                                                             # type: ignore[arg-type]
 import skrl
-from packaging import version
+from packaging import version                                                                                       # type: ignore[arg-type]
 import drum_robot   # 사용자 패키지를 강제로 로드하여 gym.register 실행
-
-# # sac 설정 출력
-# from skrl.agents.torch.sac import SAC_DEFAULT_CONFIG
-# sac_cfg = SAC_DEFAULT_CONFIG.copy()
-# print("[DEBUG] sac cfg ----------------------------------------------------")
-# print(sac_cfg)
 
 # check for minimum supported skrl version
 SKRL_VERSION = "1.4.3"
@@ -93,25 +87,25 @@ if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):               
     exit()
 
 if args_cli.ml_framework.startswith("torch"):
-    from skrl.utils.runner.torch import Runner
+    from skrl.utils.runner.torch import Runner                                                                      # type: ignore[arg-type]
 elif args_cli.ml_framework.startswith("jax"):
-    from skrl.utils.runner.jax import Runner
+    from skrl.utils.runner.jax import Runner                                                                        # type: ignore[arg-type]
 
-from isaaclab.envs import (
+from isaaclab.envs import (                                                                                         # type: ignore[arg-type]
     DirectMARLEnv,
     DirectMARLEnvCfg,
     DirectRLEnvCfg,
     ManagerBasedRLEnvCfg,
     multi_agent_to_single_agent,
 )
-from isaaclab.utils.assets import retrieve_file_path
-from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_yaml
+from isaaclab.utils.assets import retrieve_file_path                                                                # type: ignore[arg-type]
+from isaaclab.utils.dict import print_dict                                                                          # type: ignore[arg-type]
+from isaaclab.utils.io import dump_yaml                                                                             # type: ignore[arg-type]
 
-from isaaclab_rl.skrl import SkrlVecEnvWrapper
+from isaaclab_rl.skrl import SkrlVecEnvWrapper                                                                      # type: ignore[arg-type]
 
-import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils.hydra import hydra_task_config
+import isaaclab_tasks  # noqa: F401                                                                                 # type: ignore[arg-type]
+from isaaclab_tasks.utils.hydra import hydra_task_config                                                            # type: ignore[arg-type]
 
 # import logger
 logger = logging.getLogger(__name__)
