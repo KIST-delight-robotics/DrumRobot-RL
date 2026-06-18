@@ -32,7 +32,7 @@ class HitDetector:
         self.env = env
 
         instruments = Instruments()
-        self.num_drums = len(instruments.items)
+        self.num_drums = len(instruments.all)
 
         self._alloc_buffers()
         self.env_arange = torch.arange(self.env.num_envs, device=self.device)
@@ -76,7 +76,7 @@ class HitDetector:
 
         return (
             hit_mask,
-            tip_pos, tip_vel, prev_tip_pos, next_hit_armed,
+            tip_vel, prev_tip_pos, next_hit_armed,
             hit_per_arm,
         )
     
@@ -196,21 +196,21 @@ class HitDetector:
 
         # 윈도우 왼쪽 끝 스텝
         window_end_step = steps - W
-        valid = (window_end_step >= 0) & (window_end_step < T)
+        window_valid = (window_end_step >= 0) & (window_end_step < T)
         window_end_step = window_end_step.clamp(0, T - 1)
 
         target_mask = (rds[self.env_arange, window_end_step, :] > 0.5)
-        target_mask &= valid.unsqueeze(-1)     # (N, M)
+        target_mask &= window_valid.unsqueeze(-1)     # (N, M)
 
         offsets = self._get_hit_window_offsets(W)
         for offset in offsets:
             cand_steps = window_end_step + offset
-            valid = (cand_steps >= 0) & (cand_steps < T)
+            cand_valid = (cand_steps >= 0) & (cand_steps < T)
             cand_steps_clamped = cand_steps.clamp(0, T - 1)
 
             hit_mask = rds_visit[self.env_arange, cand_steps_clamped, :] > 0.5  # (N, M)
 
-            match_mask = hit_mask & valid.unsqueeze(-1) & target_mask & (~success)
+            match_mask = hit_mask & cand_valid.unsqueeze(-1) & target_mask & (~success)
             success |= match_mask
 
             time_error[match_mask] = abs(offset)  # step 차이

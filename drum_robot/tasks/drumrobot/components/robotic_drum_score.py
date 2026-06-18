@@ -107,7 +107,7 @@ class RDS:
 
         # drum
         instruments = Instruments()
-        self.num_drums = len(instruments.items)
+        self.num_drums = len(instruments.all)
 
         # midi
         random.seed(time.time_ns())
@@ -251,14 +251,13 @@ class RDS:
         rds_list = []
 
         for file_path in midi_files:
-            self._read_midi_file(file_path)
+            bpm, events = self._read_midi_file(file_path)
 
             end_event = False
             prev_t = 0.0
 
             while not end_event:
-                rds, t, end_event = self._generate_rds_from_midi(prev_t)
-                prev_t = t
+                rds, prev_t, end_event = self._generate_rds_from_midi(bpm, events, prev_t)
 
                 if torch.any(rds > 0):
                     rds_list.append(rds)
@@ -290,8 +289,6 @@ class RDS:
             if tempo != default_tempo:
                 break
 
-        self.bpm = bpm
-
         # 이벤트 파싱
         for i, track in enumerate(mid.tracks):  # 대부분 단일 트랙인거 같으니 드럼인지 확인하고 하나만 읽자
             current_time = 0
@@ -313,14 +310,16 @@ class RDS:
 
         events.sort()   # 멀티 트랙인 경우 시간 순으로 정렬
 
-        self.events = events
+        return bpm, events
     
-    def _generate_rds_from_midi(self, prev_t):
+    def _generate_rds_from_midi(
+            self,
+            bpm: float,
+            events: list[tuple[float, str]],
+            prev_t: float,
+    ) -> tuple[torch.Tensor, float, bool]:
         T = self.env.episode_length_step
         M = self.num_drums
-
-        bpm = self.bpm
-        events = self.events
 
         seconds_per_beat = 60.0 / bpm
         measure_duration = 4 * seconds_per_beat  # 4/4

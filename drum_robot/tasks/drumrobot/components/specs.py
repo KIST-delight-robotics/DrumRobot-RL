@@ -84,7 +84,7 @@ class Instrument:
 
 @dataclass
 class Instruments:
-    items: dict[str, Instrument] = field(default_factory=lambda: {
+    all: dict[str, Instrument] = field(default_factory=lambda: {
         "snare":   Instrument(1, (-0.100,  0.361,  -0.480)),
         "floor":   Instrument(2, ( 0.232,  0.359,  -0.485)),
         "mid":     Instrument(3, ( 0.216,  0.597,  -0.378)),

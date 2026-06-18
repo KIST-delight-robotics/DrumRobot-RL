@@ -9,7 +9,6 @@ from isaaclab.assets import Articulation        # pyright: ignore[reportMissingI
 from isaaclab.utils import math as math_utils   # pyright: ignore[reportMissingImports]
 
 from .specs import EnvRuntimeSpec, RobotSpec
-from .robot_initializer import RobotInitializerCfg, RobotInitializer
 
 class RobotInterface:
     def __init__(
@@ -63,13 +62,6 @@ class RobotInterface:
             device=self.device,
             dtype=torch.float32
         ).unsqueeze(0)
-
-        # 로봇 초기 위치 initializer
-        self.robot_initializer = RobotInitializer(
-            device=self.device,
-            cfg=RobotInitializerCfg(),
-            ctrl_joint_names=self.ctrl_joint_names,
-        )
     
     def get_joint_pos(self, robot):
         # 로봇의 관절 위치
@@ -94,6 +86,9 @@ class RobotInterface:
 
     def get_ctrl_joint_ids(self):
         return self.ctrl_joint_ids
+    
+    def get_ctrl_joint_name(self):
+        return self.ctrl_joint_names
     
     def get_body_pos(self, robot):
         # 스틱 링크의 월드 좌표계 위치 가져오기
@@ -132,13 +127,11 @@ class RobotInterface:
     def get_limit(self):
         return self.joint_low, self.joint_high
     
-    def reset(self, robot, env_ids):
+    def reset(self, robot, env_ids, init_robot_pos):
         default_joint_pos = robot.data.default_joint_pos[env_ids]  # 기본 자세 가져오기
         default_joint_vel = robot.data.default_joint_vel[env_ids]
 
         joint_pos = default_joint_pos.clone()
-
-        init_robot_pos = self.robot_initializer.reset_init_pos(env_ids)
         init_usd_pos = self._convert_robot_to_usd(init_robot_pos)
         joint_pos[:,self.ctrl_joint_ids] = init_usd_pos
 

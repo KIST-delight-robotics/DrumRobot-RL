@@ -370,10 +370,10 @@ class RewardComputer:
         self.cfg = cfg
         self.env = env
         instruments = Instruments()
-        self.drum_names = list(instruments.items.keys())
+        self.drum_names = list(instruments.all.keys())
 
         # 악기별 보상 가중치
-        M = len(instruments.items)
+        M = len(instruments.all)
         self.w_drum_success = torch.ones((1, M), device=self.device)
         self.n_success = torch.zeros((1, M), device=self.device)
         self.n_hit = torch.zeros((1, M), device=self.device)

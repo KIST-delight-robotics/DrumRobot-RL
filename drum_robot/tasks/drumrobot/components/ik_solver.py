@@ -97,8 +97,8 @@ class IKSolver:
         theta34 = torch.atan2(torch.sqrt(torch.clamp(r2_r, min=0.0)), zeta_r)
         theta3 = theta34 - torch.atan2(L2_R * torch.sin(theta4), L1 + L2_R * torch.cos(theta4))
 
-        # theta3 range: -45 ~ 90deg
-        bad3 = (theta3 < -45.0 * math.pi / 180.0) | (theta3 > 90.0 * math.pi / 180.0)
+        # theta3 range: -60 ~ 90deg
+        bad3 = (theta3 < -60.0 * math.pi / 180.0) | (theta3 > 90.0 * math.pi / 180.0)
         err = torch.where(bad3, torch.ones_like(err), err)
 
         # =========================
@@ -119,8 +119,8 @@ class IKSolver:
         theta56 = torch.atan2(torch.sqrt(torch.clamp(r2_l, min=0.0)), zeta_l)
         theta5 = theta56 - torch.atan2(L2_L * torch.sin(theta6), L1 + L2_L * torch.cos(theta6))
 
-        # theta5 range: -45 ~ 90deg
-        bad5 = (theta5 < -45.0 * math.pi / 180.0) | (theta5 > 90.0 * math.pi / 180.0)
+        # theta5 range: -60 ~ 90deg
+        bad5 = (theta5 < -60.0 * math.pi / 180.0) | (theta5 > 90.0 * math.pi / 180.0)
         err = torch.where(bad5, torch.ones_like(err), err)
 
         # adjust theta4/theta6 by stick geometry

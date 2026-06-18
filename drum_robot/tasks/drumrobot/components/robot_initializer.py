@@ -19,14 +19,14 @@ class RobotInitializerCfg:
 
     # 양 팔이 위치 가능한 드럼 조합 [L, R]
     drum_pairs: list = field(default_factory=lambda: [
-        (1, 1), (5, 1),
-        (1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (8, 2),
-        (1, 3), (3, 3), (4, 3), (5, 3), (8, 3),
-        (1, 4), (4, 4), (5, 4), (8, 4),
-        (1, 5), (5, 5),
-        (1, 6), (2, 6), (3, 6), (4, 6), (5, 6), (6, 6), (8, 6),
-        (1, 7), (2, 7), (3, 7), (4, 7), (6, 7), (7, 7),
-        (1, 8), (4, 8), (5, 8), (8, 8),
+        ("snare", "snare"),   ("hihat", "snare"),
+        ("snare", "floor"),   ("floor", "floor"),   ("mid", "floor"),     ("high", "floor"),    ("hihat", "floor"),  ("ride", "floor"),    ("crash_l", "floor"),
+        ("snare", "mid"),     ("mid", "mid"),       ("high", "mid"),      ("hihat", "mid"),     ("crash_l", "mid"),
+        ("snare", "high"),    ("high", "high"),     ("hihat", "high"),    ("crash_l", "high"),
+        ("snare", "hihat"),   ("hihat", "hihat"),
+        ("snare", "ride"),    ("floor", "ride"),    ("mid", "ride"),      ("high", "ride"),     ("hihat", "ride"),   ("ride", "ride"),     ("crash_l", "ride"),
+        ("floor", "crash_r"), ("mid", "crash_r"),   ("high", "crash_r"),  ("ride", "crash_r"), ("crash_r", "crash_r"),
+        ("snare", "crash_l"), ("high", "crash_l"),  ("hihat", "crash_l"), ("crash_l", "crash_l"),
     ])
 
     height_above_drum: float = 0.1
@@ -52,22 +52,18 @@ class RobotInitializer:
         N = len(self.cfg.drum_pairs)
         ik_solver = IKSolver(device=self.device)
 
-        drum_pos = torch.tensor(
-            [inst.position for inst in self.instruments.items.values()],
-            device=self.device,
-            dtype=torch.float32
-        )   # (8, 3)
+        # 이름 → Instrument lookup
+        inst_by_name = self.instruments.all
 
-        drum_pairs = torch.tensor(
-            self.cfg.drum_pairs,
-            device=self.device,
-            dtype=torch.int32
-        )   # (N, 2)
-        drum_pairs_idx = drum_pairs - 1
-
-        p = drum_pos[drum_pairs_idx, :]  # (N, 2, 3)
-        pl = p[:, 0, :]     # (N, 3)
-        pr = p[:, 1, :]
+        # 각 페어의 좌/우 팁 목표 위치를 바로 텐서로
+        pl = torch.tensor(
+            [inst_by_name[l_name].position for l_name, _ in self.cfg.drum_pairs],
+            device=self.device, dtype=torch.float32,
+        )  # (N, 3)
+        pr = torch.tensor(
+            [inst_by_name[r_name].position for _, r_name in self.cfg.drum_pairs],
+            device=self.device, dtype=torch.float32,
+        )  # (N, 3)
 
         pl[:, 2] = pl[:, 2] + self.cfg.height_above_drum
         pr[:, 2] = pr[:, 2] + self.cfg.height_above_drum
@@ -80,7 +76,9 @@ class RobotInitializer:
 
         out, err = ik_solver.solve_geometric_ik(pr, pl, theta0, theta7, theta8)    # (N, 9)
 
-        # err 경고 추가
+        if err.any():
+            failed = [self.cfg.drum_pairs[i] for i in torch.where(err > 0.5)[0].tolist()]
+            raise RuntimeError(f"[RobotInitializer] IK failed for {len(failed)}/{N} pairs: {failed}")
 
         self.pos_angle = torch.zeros((N, self.cfg.num_ctrl_joint), device=self.device)
 

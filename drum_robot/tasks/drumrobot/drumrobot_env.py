@@ -17,6 +17,7 @@ from .components.robot_interface import RobotInterface
 from .components.robotic_drum_score import RDSCfg, RDS
 from .components.hit_detector import HitDetector, HitDetectorCfg
 from .components.reward import RewardComputerCfg, RewardComputer
+from .components.robot_initializer import RobotInitializerCfg, RobotInitializer
 from .components.visualizer import VisualizerCfg, Visualizer
 
 from drum_robot.utils.logger import EnvLogger, LoggerCfg
@@ -55,11 +56,11 @@ class DrumRobotEnv(DirectRLEnv):
         # drum
         self.instruments = Instruments()
         self.default_drum_pos = torch.tensor(
-            [inst.position for inst in self.instruments.items.values()],
+            [inst.position for inst in self.instruments.all.values()],
             device=self.device,
             dtype=torch.float32,
         )
-        M = len(self.instruments.items)
+        M = len(self.instruments.all)
         self.drum_pos = torch.zeros((N, M, 3), device=self.device, dtype=torch.float32)
 
         # spec
@@ -114,6 +115,14 @@ class DrumRobotEnv(DirectRLEnv):
             env=env_specs,
         )
 
+        # 로봇 초기 위치 initializer
+        ctrl_joint_names = self.robot_interface.get_ctrl_joint_name()
+        self.robot_initializer = RobotInitializer(
+            device=self.device,
+            cfg=RobotInitializerCfg(),
+            ctrl_joint_names=ctrl_joint_names,
+        )
+
         # 시각화
         self.visualizer = Visualizer(
             device=self.device,
@@ -122,7 +131,7 @@ class DrumRobotEnv(DirectRLEnv):
             enable_visualization=self.cfg.enable_visualization,
         )
         
-        drum_names = list(self.instruments.items.keys())
+        drum_names = list(self.instruments.all.keys())
         self.visualizer.init_visualization(drum_names)
 
     def _setup_scene(self):
@@ -195,7 +204,7 @@ class DrumRobotEnv(DirectRLEnv):
 
         (
             hit_mask,
-            tip_pos, tip_vel, prev_tip_pos, next_hit_armed,
+            tip_vel, prev_tip_pos, next_hit_armed,
             hit_per_arm,
         ) = self.hit_detector.detect_hit(
             tip_pos,
@@ -288,7 +297,8 @@ class DrumRobotEnv(DirectRLEnv):
         self.rds.reset(env_ids=env_ids, score_ratio=0.0, selection_strength=0.0)  # 랜덤으로 RDS 생성해서 사용
 
         # 로봇 자세 리셋
-        joint_pos, joint_vel = self.robot_interface.reset(self.robot, env_ids)
+        init_robot_pos = self.robot_initializer.reset_init_pos(env_ids)
+        joint_pos, joint_vel = self.robot_interface.reset(self.robot, env_ids, init_robot_pos)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # tip 리셋
@@ -309,7 +319,7 @@ class DrumRobotEnv(DirectRLEnv):
     """ init """
     def _load_config(self):
         # obs 차원 계산
-        M = len(self.instruments.items)
+        M = len(self.instruments.all)
         K = self.cfg.num_hits
         
         self.obs_dim_joint_pos = 9                     # ctrl 관절 수
@@ -330,7 +340,7 @@ class DrumRobotEnv(DirectRLEnv):
 
     def _alloc_buffers(self):
         N = self.num_envs
-        M = len(self.instruments.items)
+        M = len(self.instruments.all)
 
         # 타격 상태 버퍼
         self.hit_armed = torch.ones((N, 2, M), device=self.device, dtype=torch.bool)

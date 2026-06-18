@@ -41,7 +41,7 @@ class Visualizer():
         self.enable_visualization = enable_visualization
 
         instruments = Instruments()
-        self.num_drums = len(instruments.items)
+        self.num_drums = len(instruments.all)
 
     # =========================================================
     # Public Interface
