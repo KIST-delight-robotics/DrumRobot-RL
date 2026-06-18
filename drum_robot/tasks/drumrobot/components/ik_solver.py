@@ -39,9 +39,9 @@ class IKSolver:
             self,
             pR: torch.Tensor,       # (N, 3)
             pL: torch.Tensor,       # (N, 3)
-            theta0: torch.Tensor,   # (N, 1)
-            theta7: torch.Tensor,   # (N, 1)
-            theta8: torch.Tensor,   # (N, 1)
+            theta0: torch.Tensor,   # (N, )
+            theta7: torch.Tensor,   # (N, )
+            theta8: torch.Tensor,   # (N, )
     ) -> torch.Tensor:
 
         err = torch.zeros_like(theta0)

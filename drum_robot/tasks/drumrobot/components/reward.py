@@ -480,7 +480,7 @@ class RewardComputer:
         num_wrong = wrong_hit.float().sum(dim=-1)
         num_missed = missed_target.float().sum(dim=-1)
 
-        terms = {
+        log_terms = {
             "reward": reward,
             "proximity": proximity_cost,
             "progress(x100)": progress_reward * 100,
@@ -493,18 +493,18 @@ class RewardComputer:
             "under_drum_pen": under_drum_pen,
         }
 
-        p_terms = {
+        rate_log_terms = {
             "success_rate": torch.stack([num_success, num_hit], dim=-1),
             "wrong_rate": torch.stack([num_wrong, num_hit], dim=-1),
             "miss_rate": torch.stack([num_missed, num_hit], dim=-1),
         }
 
         for i, name in enumerate(self.drum_names):
-            p_terms[f"{name}_success_rate"] = torch.stack([success[:, i], num_hit_drum[:, i]], dim=-1)
-            p_terms[f"{name}_wrong_rate"]   = torch.stack([wrong_hit[:, i], num_hit_drum[:, i]], dim=-1)
-            p_terms[f"{name}_miss_rate"]    = torch.stack([missed_target[:, i], num_hit_drum[:, i]], dim=-1)
+            rate_log_terms[f"{name}_success_rate"] = torch.stack([success[:, i], num_hit_drum[:, i]], dim=-1)
+            rate_log_terms[f"{name}_wrong_rate"]   = torch.stack([wrong_hit[:, i], num_hit_drum[:, i]], dim=-1)
+            rate_log_terms[f"{name}_miss_rate"]    = torch.stack([missed_target[:, i], num_hit_drum[:, i]], dim=-1)
 
-        return reward, terms, p_terms
+        return reward, log_terms, rate_log_terms
     
     def update_difficulty_weights(
             self,

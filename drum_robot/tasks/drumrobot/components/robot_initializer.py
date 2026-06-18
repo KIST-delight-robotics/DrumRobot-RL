@@ -80,6 +80,8 @@ class RobotInitializer:
 
         out, err = ik_solver.solve_geometric_ik(pr, pl, theta0, theta7, theta8)    # (N, 9)
 
+        # err 경고 추가
+
         self.pos_angle = torch.zeros((N, self.cfg.num_ctrl_joint), device=self.device)
 
         """ 반드시 self.ctrl_joint_names 순서대로 텐서를 만들어여 함 """

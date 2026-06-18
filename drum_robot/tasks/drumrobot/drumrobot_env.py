@@ -247,7 +247,7 @@ class DrumRobotEnv(DirectRLEnv):
 
         joint_low, joint_high = self.robot_interface.get_limit()
 
-        reward, terms, p_terms = self.reward_computer.compute(
+        reward, log_terms, rate_log_terms = self.reward_computer.compute(
             success=self.success,
             wrong_hit=self.wrong_hit,
             missed_target=self.missed_target,
@@ -266,8 +266,8 @@ class DrumRobotEnv(DirectRLEnv):
         )
 
         # 로그 출력
-        self.logger.add(terms)
-        self.logger.add_probability(p_terms)
+        self.logger.add(log_terms)
+        self.logger.add_probability(rate_log_terms)
         self.logger.maybe_flush()
 
         if torch.isnan(reward).any():
