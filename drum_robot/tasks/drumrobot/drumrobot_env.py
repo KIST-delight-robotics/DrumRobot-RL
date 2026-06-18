@@ -127,7 +127,6 @@ class DrumRobotEnv(DirectRLEnv):
             device=self.device,
             cfg=VisualizerCfg(),
             env=env_specs,
-            enable_visualization=self.cfg.enable_visualization,
         )
         
         drum_names = list(self.instruments.all.keys())
