@@ -121,7 +121,7 @@ class RobotInterface:
         quat = all_body_quat[:, idx]
 
         # 팁 위치 구하기
-        tip_w = pos + math_utils.quat_apply(quat, self.tip_offset_L)
+        tip_w = pos + math_utils.quat_apply(quat, self.tip_offset_R)
 
         # 월드 기준 -> env 기준
         R_tip = tip_w - self.env_origins

@@ -86,23 +86,6 @@ class DrumRobotEnv(DirectRLEnv):
             robot=self.robot,
             env_origins=self.scene.env_origins,
         )
-        ################################################################
-        # # 양손 스틱 링크의 인덱스
-        # self.left_stick_idx = self._get_body_idx("left_wrist")  # 10
-        # self.right_stick_idx = self._get_body_idx("right_wrist")  # 11
-
-        # # 양손 하완 링크의 인덱스
-        # self.left_arm_idx = self._get_body_idx("left_elbow")  # 07
-        # self.right_arm_idx = self._get_body_idx("right_elbow")  # 08
-
-        # # offset wrist link to tip
-        # L_off = torch.tensor(self.cfg.tip_offset_left, device=self.device, dtype=torch.float32)  # (3,)
-        # R_off = torch.tensor(self.cfg.tip_offset_right, device=self.device, dtype=torch.float32)
-
-        # self.tip_offset_L = L_off.unsqueeze(0).expand(self.num_envs, 3)
-        # self.tip_offset_R = R_off.unsqueeze(0).expand(self.num_envs, 3)
-
-        #################################################################
 
         self._load_config()  
         self._alloc_buffers()   # 버퍼 할당
@@ -420,29 +403,6 @@ class DrumRobotEnv(DirectRLEnv):
         )
         
         return obs
-    
-    """ func (_get_dones) """
-    def _compute_tip_position(self):
-        # 스틱 링크의 월드 좌표계 위치 가져오기
-        all_body_pos = self.robot.data.body_pos_w       # (num_envs, num_bodies, 3)
-        all_body_quat = self.robot.data.body_quat_w     # (num_envs, num_bodies, 4)  (w,x,y,z)인 경우가 많음
-
-        L_wrist_pos = all_body_pos[:, self.left_stick_idx]      # (num_envs, 3)
-        R_wrist_pos = all_body_pos[:, self.right_stick_idx]
-        L_quat = all_body_quat[:, self.left_stick_idx]
-        R_quat = all_body_quat[:, self.right_stick_idx]
-
-        # 팁 위치 구하기
-        L_tip_w = L_wrist_pos + math_utils.quat_apply(L_quat, self.tip_offset_L)
-        R_tip_w = R_wrist_pos + math_utils.quat_apply(R_quat, self.tip_offset_R)
-
-        # 월드 기준 -> env 기준
-        L_tip = L_tip_w - self.scene.env_origins
-        R_tip = R_tip_w - self.scene.env_origins
-
-        tip_pos = torch.stack([L_tip, R_tip], dim=1)   # (num_envs, 2, 3)
-
-        return tip_pos
 
     """ func (_reset_idx) """
     def _reset_drum(self, env_ids):
