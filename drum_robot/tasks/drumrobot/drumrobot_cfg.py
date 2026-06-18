@@ -46,7 +46,7 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                 enabled_self_collisions=False,
                 solver_position_iteration_count=4,
-                solver_velocity_iteration_count=1,  # 0 -> 1 진동 줄이기
+                solver_velocity_iteration_count=1,
             ),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 disable_gravity=False,
@@ -68,9 +68,9 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
             "left_shoulder_2",
             "left_elbow",
             "right_wrist",
-            "left_wrist",], # 필요시 모든 관절을 제어 대상으로 설정 joint_names_expr=[".*"]
-                stiffness=200.0,           # 벨로시티 제어 시 일반적으로 0
-                damping=10.0,           # 댐핑값은 로봇 무게에 맞춰 조절
+            "left_wrist",],         # 필요시 모든 관절을 제어 대상으로 설정 joint_names_expr=[".*"]
+                stiffness=200.0,    # 벨로시티 제어 시 일반적으로 0
+                damping=10.0,       # 댐핑값은 로봇 무게에 맞춰 조절
             ),
         },
     )
@@ -78,14 +78,5 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     # Scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=128, env_spacing=2.0, replicate_physics=True)
 
-    # 드럼 위치 노이즈
-    drum_noise_scale: float = 0.02
-
     # 관측값 정규화 파라미터
     joint_vel_scale: float = 5.0
-
-    # 최대 관측 타격 개수
-    num_hits: int = 3
-
-    """ 시각화 설정 """
-    enable_visualization: bool = False

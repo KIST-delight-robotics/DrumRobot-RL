@@ -304,7 +304,7 @@ class DrumRobotEnv(DirectRLEnv):
     def _init_obs(self):
         # obs 차원 계산
         M = len(self.instruments.all)
-        K = self.cfg.num_hits
+        K = self.rds.cfg.num_hits
         
         self.obs_dim_joint_pos = 9                     # ctrl 관절 수
         self.obs_dim_joint_vel = 9
@@ -385,7 +385,7 @@ class DrumRobotEnv(DirectRLEnv):
     def _reset_drum(self, env_ids):
         # 각 env/각 에피소드에서 악기 위치
         drum_pos = self.default_drum_pos.unsqueeze(0).repeat(len(env_ids), 1, 1)  # (M, 3) -차원 추가-> (1, M, 3) -복제-> (N, M, 3)
-        drum_pos = drum_pos + self.cfg.drum_noise_scale * torch.randn_like(drum_pos)
+        drum_pos = drum_pos + self.instruments.drum_noise_scale * torch.randn_like(drum_pos)
         drum_pos[:, :, 2] = drum_pos[:, :, 2] + self.cfg.robot_waist_joint_offset_z
 
         self.drum_pos[env_ids] = drum_pos

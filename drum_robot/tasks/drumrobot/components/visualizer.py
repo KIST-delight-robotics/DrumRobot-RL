@@ -15,6 +15,9 @@ from .specs import EnvRuntimeSpec, Instruments
 
 @dataclass
 class VisualizerCfg:
+    """ 시각화 설정 """
+    enable_visualization: bool = False
+
     drum_radius: float = 0.1
     drum_height: float = 0.01
 
@@ -33,12 +36,10 @@ class Visualizer():
             device: torch.device | str,
             cfg: VisualizerCfg,
             env: EnvRuntimeSpec,
-            enable_visualization: bool
     ):
         self.device = device
         self.cfg = cfg
         self.env = env
-        self.enable_visualization = enable_visualization
 
         instruments = Instruments()
         self.num_drums = len(instruments.all)
@@ -47,17 +48,17 @@ class Visualizer():
     # Public Interface
     # =========================================================
     def init_visualization(self, drum_names):
-        if self.enable_visualization:
+        if self.cfg.enable_visualization:
             self._init_drum(drum_names)
             self._init_hit_marker()
     
     def step(self, tip_pos, next_hits, hit_per_arm):
-        if self.enable_visualization:
+        if self.cfg.enable_visualization:
             self._update_drum_color(next_hits)
             self._translate_hit_marker(tip_pos, hit_per_arm)
     
     def reset(self, drum_pos):
-        if self.enable_visualization:
+        if self.cfg.enable_visualization:
             self._translate_drum(drum_pos)
         
     # =========================================================
