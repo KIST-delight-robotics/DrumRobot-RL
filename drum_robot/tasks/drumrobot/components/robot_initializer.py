@@ -73,12 +73,12 @@ class RobotInitializer:
         pr[:, 2] = pr[:, 2] + self.cfg.height_above_drum
 
         pm_xy = (pl[:, 0:2] + pr[:, 0:2]) / 2
-        the0 = torch.atan2(pm_xy[:, 1], pm_xy[:, 0]) - 90*math.pi/180
+        theta0 = torch.atan2(pm_xy[:, 1], pm_xy[:, 0]) - 90*math.pi/180
 
-        the7 = torch.full((N,), 25*math.pi/180, device=self.device)
-        the8 = torch.full((N,), 25*math.pi/180, device=self.device)
+        theta7 = torch.full((N,), 25*math.pi/180, device=self.device)
+        theta8 = torch.full((N,), 25*math.pi/180, device=self.device)
 
-        out, err = ik_solver.solve_geometric_ik(pr, pl, the0, the7, the8)    # (N, 9)
+        out, err = ik_solver.solve_geometric_ik(pr, pl, theta0, theta7, theta8)    # (N, 9)
 
         self.pos_angle = torch.zeros((N, self.cfg.num_ctrl_joint), device=self.device)
 

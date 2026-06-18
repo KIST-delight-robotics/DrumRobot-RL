@@ -8,14 +8,14 @@ import torch                                    # pyright: ignore[reportMissingI
 from isaaclab.assets import Articulation        # pyright: ignore[reportMissingImports]
 from isaaclab.utils import math as math_utils   # pyright: ignore[reportMissingImports]
 
-from .specs import EnvSpec, RobotSpec
+from .specs import EnvRuntimeSpec, RobotSpec
 from .robot_initializer import RobotInitializerCfg, RobotInitializer
 
 class RobotInterface:
     def __init__(
             self,
             device: torch.device | str,
-            env: EnvSpec,
+            env: EnvRuntimeSpec,
             robot: Articulation,
             env_origins: torch.Tensor,
     ):

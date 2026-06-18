@@ -87,7 +87,6 @@ class IKSolver:
         x_r = zeta_r * zeta_r + r2_r - L1 * L1 - L2_R * L2_R
         rad_r = 4.0 * L1 * L1 * L2_R * L2_R - x_r * x_r
 
-        # C++: rad<0 이면 즉시 return (theta0=99, err=1)
         sqrt_bad_r = rad_r < 0.0
         err = torch.where(sqrt_bad_r, torch.ones_like(err), err)
 

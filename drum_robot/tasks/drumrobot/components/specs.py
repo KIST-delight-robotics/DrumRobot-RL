@@ -1,5 +1,5 @@
 """
-모든 컴포넌트가 공유할 자원
+이 파일은 컴포넌트 간 공유 dataclass
 """
 
 from __future__ import annotations
@@ -8,12 +8,12 @@ from dataclasses import dataclass, field
 import math # pi
 
 @dataclass
-class EnvSpec:
+class EnvRuntimeSpec:
     num_envs: int
     episode_length_step: int
     max_lookahead_step: int
     hit_window_step: int
-    dt: float
+    step_dt: float
 
 @dataclass
 class PartLength:
@@ -95,4 +95,4 @@ class Instruments:
         "crash_l": Instrument(8, (-0.184,  0.669,  -0.147)),
     })
 
-    inst_noise_scale: float = 0.02
+    drum_noise_scale: float = 0.02

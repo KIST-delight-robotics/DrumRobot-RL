@@ -12,7 +12,7 @@ from pathlib import Path
 import random
 import time
 
-from .specs import EnvSpec, Instruments 
+from .specs import EnvRuntimeSpec, Instruments 
 
 GENERAL_MIDI_PERCUSSION_KEY_MAP = {
     35: "Acoustic Bass Drum",
@@ -39,28 +39,6 @@ GENERAL_MIDI_PERCUSSION_KEY_MAP = {
     56: "Cowbell",
     57: "Crash Cymbal 2",
     59: "Ride Cymbal 2",
-    # 60: "Hi Bongo",
-    # 61: "Low Bongo",
-    # 62: "Mute Hi Conga",
-    # 63: "Open Hi Conga",
-    # 64: "Low Conga",
-    # 65: "High Timbale",
-    # 66: "Low Timbale",
-    # 67: "High Agogo",
-    # 68: "Low Agogo",
-    # 69: "Cabasa",
-    # 70: "Maracas",
-    # 71: "Short Whistle",
-    # 72: "Long Whistle",
-    # 73: "Short Guiro",
-    # 74: "Long Guiro",
-    # 75: "Claves",
-    # 76: "Hi Wood Block",
-    # 77: "Low Wood Block",
-    # 78: "Mute Cuica",
-    # 79: "Open Cuica",
-    # 80: "Mute Triangle",
-    # 81: "Open Triangle",
     22: "Tom(22)",
     26: "Tom(26)",
     58: "58",
@@ -73,7 +51,7 @@ class RDSCfg:
     slow_factor: float = 1.5        # slow_factor=2 -> 0.5배속 / slow_factor=0.5 -> 2배속
     start_offset_steps: int = 20
 
-    instrument_to_idx: dict = field(default_factory=lambda: {
+    note_to_drum_idx: dict = field(default_factory=lambda: {
         "Acoustic Snare": 0,
         "Electric Snare": 0,
         "Side Stick": 0,    # 임시로 스네어 타격
@@ -104,7 +82,7 @@ class RDSCfg:
         "Tom(26)": 3,   # 확인 필요
     })
 
-    instrument_pedal: set = field(default_factory=lambda: {
+    pedal_instruments: set = field(default_factory=lambda: {
         # 페달로 타격하는 경우 예외 처리
         "Acoustic Bass Drum",
         "Bass Drum 1",
@@ -121,7 +99,7 @@ class RDS:
             self,
             device: torch.device | str,
             cfg: RDSCfg,
-            env: EnvSpec,
+            env: EnvRuntimeSpec,
     ):
         self.device = torch.device(device)
         self.cfg = cfg
@@ -312,7 +290,6 @@ class RDS:
             if tempo != default_tempo:
                 break
 
-        # print(f"Detected BPM: {bpm:.2f}")
         self.bpm = bpm
 
         # 이벤트 파싱
@@ -325,7 +302,6 @@ class RDS:
 
                 if msg.type == 'set_tempo':
                     tempo = msg.tempo
-                    # print(f"Track: {i}, bpm: {60_000_000 / tempo}")
 
                 if msg.type == 'note_on' and msg.velocity > 0 and msg.channel == 9:
                     note = msg.note
@@ -337,8 +313,6 @@ class RDS:
 
         events.sort()   # 멀티 트랙인 경우 시간 순으로 정렬
 
-        # for t, inst in events:
-        #     print(f"{t:.3f}s : {inst}")
         self.events = events
     
     def _generate_rds_from_midi(self, prev_t):
@@ -357,7 +331,7 @@ class RDS:
         end = True
         next_t = 0.0
 
-        for t, inst in events:
+        for t, note in events:
             if t < prev_t:
                 continue
 
@@ -371,21 +345,20 @@ class RDS:
                 break
 
             # instrument → index
-            if inst not in self.cfg.instrument_to_idx:
-                if inst not in self.cfg.instrument_pedal:
-                    print(f"Warning: Unknown instrument {inst}, skipping.")
+            if note not in self.cfg.note_to_drum_idx:
+                if note not in self.cfg.pedal_instruments:
+                    print(f"Warning: Unknown instrument {note}, skipping.")
                 continue
-            inst_idx = self.cfg.instrument_to_idx[inst]
+            drum_idx = self.cfg.note_to_drum_idx[note]
 
             # 시간 → index
-            time_idx = int(round(self.cfg.slow_factor * (t - first_t) / self.env.dt)) + self.cfg.start_offset_steps
+            time_idx = int(round(self.cfg.slow_factor * (t - first_t) / self.env.step_dt)) + self.cfg.start_offset_steps
             safe_T = T - self.env.hit_window_step   # episode 마지막 W step은 판정하지 않음으로 타격으로 채우지 않음
             if time_idx >= safe_T:
                 continue  # episode 길이 초과 이벤트는 무시
 
             # 모든 env에 이벤트 적용
-            # print(f"robotic_drum_score: {time_idx}/{T}, {inst_idx+1}")
-            robotic_drum_score[time_idx, inst_idx] = 1
+            robotic_drum_score[time_idx, drum_idx] = 1
 
         return robotic_drum_score, next_t, end
 
@@ -401,18 +374,18 @@ class RDS:
         # 2. 드럼 변경 횟수
         switch_count = torch.zeros((N,), device=self.device)
 
-        prev_inst = torch.zeros((N, M), device=self.device)
+        prev_note = torch.zeros((N, M), device=self.device)
         for i in range(T):
-            curr_inst = rds_tensors[:, i, :]  # (N, M)
-            curr_hit = curr_inst.sum(dim=1) > 0.5  # (N,)
+            curr_note = rds_tensors[:, i, :]  # (N, M)
+            curr_hit = curr_note.sum(dim=1) > 0.5  # (N,)
 
             # 이전과 현재가 다르면 switch
-            diff = (curr_inst != prev_inst).any(dim=1)  # (N,)
+            diff = (curr_note != prev_note).any(dim=1)  # (N,)
             switch = curr_hit & diff
             switch_count += switch.float()
 
             # 현재 타격이 있을 때만 prev 갱신
-            prev_inst = torch.where(curr_hit.unsqueeze(1), curr_inst, prev_inst)
+            prev_note = torch.where(curr_hit.unsqueeze(1), curr_note, prev_note)
 
         # 3. 스네어 비율
         num_total_hit = num_drum_hit.sum(dim=1).clamp(min=1e-6)
@@ -423,14 +396,8 @@ class RDS:
         crash_exist = (crash_count > 0).float()
 
         # 5. 최종 score
-        # w1, w2, w3, w4 = 1.0, 0.5, 2.0, 1.0
         w1, w2, w3, w4 = 1.0, 1.0, 1.0, 0.0
         score = w1 * num_target + w2 * switch_count + w3 * (1 - snare_rate) + w4 * crash_exist
-
-        # print(f"num_target: {num_target.sum()/N}")
-        # print(f"switch_count: {switch_count.sum()/N}")
-        # print(f"snare_rate: {snare_rate.sum()/N}")
-        # print(f"crash_rate: {crash_exist.sum()/N}")
 
         return score
     
@@ -468,8 +435,8 @@ class RDS:
             si = (int)(s + (2 * i) * (e - s) / (2 * k - 1))
             ei = (int)(s + (2 * i + 1) * (e - s) / (2 * k - 1))
             time_rand = torch.randint(si, ei, (N,), device=self.device)
-            inst_rand = torch.randint(0, M, (N,), device=self.device)
+            drum_rand = torch.randint(0, M, (N,), device=self.device)
 
-            rds_rand[torch.arange(N), time_rand, inst_rand] = 1
+            rds_rand[torch.arange(N), time_rand, drum_rand] = 1
 
         return rds_rand

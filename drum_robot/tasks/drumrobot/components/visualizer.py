@@ -11,14 +11,10 @@ import isaaclab.sim as sim_utils    # pyright: ignore[reportMissingImports]
 import omni.usd                     # pyright: ignore[reportMissingImports]
 from pxr import UsdGeom, Gf         # pyright: ignore[reportMissingImports]
 
-from .specs import EnvSpec, Instruments
+from .specs import EnvRuntimeSpec, Instruments
 
 @dataclass
 class VisualizerCfg:
-    tip_marker_radius: float = 0.015
-
-    tip_color: tuple[float, float, float] = (1.0, 0.0, 0.0)
-
     drum_radius: float = 0.1
     drum_height: float = 0.01
 
@@ -36,7 +32,7 @@ class Visualizer():
             self,
             device: torch.device | str,
             cfg: VisualizerCfg,
-            env: EnvSpec,
+            env: EnvRuntimeSpec,
             enable_visualization: bool
     ):
         self.device = device
@@ -50,15 +46,13 @@ class Visualizer():
     # =========================================================
     # Public Interface
     # =========================================================
-    def init_visualization(self, inst_names):
+    def init_visualization(self, drum_names):
         if self.enable_visualization:
-            # self._init_tip()
-            self._init_drum(inst_names)
+            self._init_drum(drum_names)
             self._init_hit_marker()
     
     def step(self, tip_pos, next_hits, hit_per_arm):
         if self.enable_visualization:
-            # self._translate_tip(tip_pos)
             self._update_drum_color(next_hits)
             self._translate_hit_marker(tip_pos, hit_per_arm)
     
@@ -69,31 +63,14 @@ class Visualizer():
     # =========================================================
     # Domain Logic  (드럼로봇 시각화 요소별 업데이트)
     # =========================================================
-    def _init_tip(self):
-        t_op, c_op = self._create_sphere(
-            node_name="TipMarkerL",
-            radius=self.cfg.tip_marker_radius,
-            color=self.cfg.tip_color
-        )
-        self.tip_translate_ops_L = t_op
-        self.tip_color_ops_L = c_op
-
-        t_op, c_op  = self._create_sphere(
-            node_name="TipMarkerR",
-            radius=self.cfg.tip_marker_radius,
-            color=self.cfg.tip_color
-        )
-        self.tip_translate_ops_R = t_op
-        self.tip_color_ops_R = c_op
-    
-    def _init_drum(self, inst_names):
+    def _init_drum(self, drum_names):
         # 고속 업데이트를 위한 TranslateOp 캐시
         self._drum_translate_ops = []
 
         # 고속 업데이트를 위한 색 Primvar 캐시
         self._drum_color_ops = []
 
-        for _, name in enumerate(inst_names):
+        for _, name in enumerate(drum_names):
             t_op, c_op = self._create_cylinder(
                 node_name=name,
                 radius=self.cfg.drum_radius,
@@ -119,10 +96,6 @@ class Visualizer():
 
             self._hit_marker_translate_ops.append(t_op)
 
-    def _translate_tip(self, tip_pos):
-        self._translate(self.tip_translate_ops_L, tip_pos[:, 0, :])
-        self._translate(self.tip_translate_ops_R, tip_pos[:, 1, :])
-
     def _update_drum_color(self, next_hits):
         M = self.num_drums
         L = self.env.max_lookahead_step
@@ -143,10 +116,6 @@ class Visualizer():
             far_mask = torch.any(hit_mask & ~time_mask, dim=1)  # (N,)
 
             # 우선순위: near > mid > far
-            near_ids = torch.where(near_mask)[0]
-            far_ids  = torch.where(~near_mask & far_mask)[0]
-            none_ids = torch.where(~near_mask & ~far_mask)[0]
-
             c_op = self._drum_color_ops[i]
 
             near_ids = [op for idx, op in enumerate(c_op) if near_mask[idx]]
@@ -161,13 +130,13 @@ class Visualizer():
             self._color(far_ids, far_color)
             self._color(none_ids, base_color)
 
-    def _translate_hit_marker(self, tip_posper_arm, hit_per_arm):
+    def _translate_hit_marker(self, tip_pos_per_arm, hit_per_arm):
         # tip_pos:      (N, 2, 3)
         # hit_per_arm:  (N, 2, M)
         hit_mask_per_arm = torch.any(hit_per_arm, dim=2)    # (N, 2)
 
         for i in range(2):
-            tip_pos = tip_posper_arm[:, i, :]
+            tip_pos = tip_pos_per_arm[:, i, :]
             hit_mask = hit_mask_per_arm[:, i]
 
             t_op = self._hit_marker_translate_ops[i]

@@ -7,7 +7,7 @@ from __future__ import annotations
 import torch    # pyright: ignore[reportMissingImports]
 from dataclasses import dataclass
 
-from .specs import EnvSpec, Instruments
+from .specs import EnvRuntimeSpec, Instruments
 
 @dataclass
 class HitDetectorCfg:
@@ -25,7 +25,7 @@ class HitDetector:
             self,
             device: torch.device | str,
             cfg: HitDetectorCfg,
-            env: EnvSpec,
+            env: EnvRuntimeSpec,
     ):
         self.device = device
         self.cfg = cfg
@@ -67,7 +67,7 @@ class HitDetector:
         hit_mask = torch.any(hit_per_arm, dim=1)   # (N, M)
 
         # re-arm 확인
-        next_hit_armed = self._check_rearm(hit_armed, hit_per_arm, contact_mask, diff_z)
+        next_hit_armed = self._check_rearm(hit_armed, contact_mask, diff_z)
 
         # 
         self.tip_pos = tip_pos
@@ -110,7 +110,7 @@ class HitDetector:
         self.tip_vel = torch.zeros((N, 2, 3), device=self.device)
     
     def _compute_tip_velocity(self, tip_pos, prev_tip_pos, prev_tip_vel, alpha):
-        tip_vel = (tip_pos - prev_tip_pos) / self.env.dt
+        tip_vel = (tip_pos - prev_tip_pos) / self.env.step_dt
 
         tip_vel_f = (1 - alpha) * tip_vel + alpha * prev_tip_vel
 
@@ -227,7 +227,7 @@ class HitDetector:
 
         return offsets
 
-    def _check_rearm(self, hit_armed, hit_per_arm, contact_mask, diff_z):
+    def _check_rearm(self, hit_armed, contact_mask, diff_z):
         """
         준비
 

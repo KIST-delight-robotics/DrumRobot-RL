@@ -7,11 +7,11 @@ from __future__ import annotations
 import torch    # pyright: ignore[reportMissingImports]
 from dataclasses import dataclass
 
-from .specs import EnvSpec, Instruments
+from .specs import EnvRuntimeSpec, Instruments
 
 # === 모듈 레벨 jit 함수들 ===
 @torch.jit.script
-def assignment_reward_for_targets(
+def compute_arm_target_assignment(
         target_mask: torch.Tensor,  # (N, M)
         drum_pos: torch.Tensor,     # (N, M, 3)
         left_tip_pos: torch.Tensor, # (N, 3)
@@ -162,7 +162,7 @@ def compute_reward_terms(
         joint_low: torch.Tensor,        # (1, 9) [rad]
         joint_high: torch.Tensor,       # (1, 9) [rad]
 
-        w_inst_success: torch.Tensor,   # (1, M)
+        w_drum_success: torch.Tensor,   # (1, M)
 
         k_accuracy: float,
         k_time_to_hit: float,
@@ -179,11 +179,10 @@ def compute_reward_terms(
     # goal terms
     # -------------------------------------------------
     success_reward = (
-        success.float() * w_inst_success           # (N, M)
-    ).sum(dim=-1)                                  # (N,)
-    # success_reward = success.float().sum(dim=-1)        # (N,)
-    wrong_cost = wrong_hit.float().sum(dim=-1)        # (N,)
-    missed_cost = missed_target.float().sum(dim=-1)   # (N,)
+        success.float() * w_drum_success            # (N, M)
+    ).sum(dim=-1)                                   # (N,)
+    wrong_cost = wrong_hit.float().sum(dim=-1)      # (N,)
+    missed_cost = missed_target.float().sum(dim=-1) # (N,)
 
     valid_mask = time_error >= 0
     time_accuracy_reward = torch.exp(-k_accuracy * time_error)
@@ -198,7 +197,7 @@ def compute_reward_terms(
     nearest_target_mask = next_hits[:, 0, :M] > 0.5
     first_time = next_hits[:, 0, M]
 
-    curr_cost, upward_reward, downward_reward = assignment_reward_for_targets(
+    curr_cost, upward_reward, downward_reward = compute_arm_target_assignment(
         target_mask=nearest_target_mask,
         drum_pos=drum_pos,
         left_tip_pos=left_tip_pos,
@@ -207,7 +206,7 @@ def compute_reward_terms(
         hit_armed=hit_armed,
     )
 
-    prev_cost, _, _ = assignment_reward_for_targets(
+    prev_cost, _, _ = compute_arm_target_assignment(
         target_mask=nearest_target_mask,
         drum_pos=drum_pos,
         left_tip_pos=prev_left_tip_pos,
@@ -365,17 +364,17 @@ class RewardComputer:
     def __init__(
             self, device: torch.device | str,
             cfg: RewardComputerCfg,
-            env: EnvSpec,
+            env: EnvRuntimeSpec,
     ):
         self.device = torch.device(device)
         self.cfg = cfg
         self.env = env
         instruments = Instruments()
-        self.inst_names = list(instruments.items.keys())
+        self.drum_names = list(instruments.items.keys())
 
         # 악기별 보상 가중치
         M = len(instruments.items)
-        self.w_inst_success = torch.ones((1, M), device=self.device)
+        self.w_drum_success = torch.ones((1, M), device=self.device)
         self.n_success = torch.zeros((1, M), device=self.device)
         self.n_hit = torch.zeros((1, M), device=self.device)
 
@@ -390,7 +389,7 @@ class RewardComputer:
             drum_pos: torch.Tensor,
             next_hits: torch.Tensor,
             tip_vel: torch.Tensor,
-            hit_armed_for_reward: torch.Tensor,
+            prev_hit_armed: torch.Tensor,
             robot_vel: torch.Tensor,
             actions: torch.Tensor,
             robot_pos: torch.Tensor,
@@ -416,7 +415,7 @@ class RewardComputer:
             next_hits=next_hits,
 
             tip_vel=tip_vel,
-            hit_armed=hit_armed_for_reward,
+            hit_armed=prev_hit_armed,
 
             joint_vel=robot_vel,
             action=actions,
@@ -424,7 +423,7 @@ class RewardComputer:
             joint_low=joint_low,
             joint_high=joint_high,
 
-            w_inst_success=self.w_inst_success,
+            w_drum_success=self.w_drum_success,
 
             k_accuracy=self.cfg.k_accuracy,
             k_time_to_hit=self.cfg.k_time_to_hit,
@@ -474,9 +473,9 @@ class RewardComputer:
             w_under_drum=self.cfg.w_under_drum,
         )
 
-        num_hit_inst = success.float() + missed_target.float()
+        num_hit_drum = success.float() + missed_target.float()
 
-        num_hit = num_hit_inst.float().sum(dim=-1)
+        num_hit = num_hit_drum.float().sum(dim=-1)
         num_success = success.float().sum(dim=-1)
         num_wrong = wrong_hit.float().sum(dim=-1)
         num_missed = missed_target.float().sum(dim=-1)
@@ -500,10 +499,10 @@ class RewardComputer:
             "miss_rate": torch.stack([num_missed, num_hit], dim=-1),
         }
 
-        for i, name in enumerate(self.inst_names):
-            p_terms[f"{name}_success_rate"] = torch.stack([success[:, i], num_hit_inst[:, i]], dim=-1)
-            p_terms[f"{name}_wrong_rate"]   = torch.stack([wrong_hit[:, i], num_hit_inst[:, i]], dim=-1)
-            p_terms[f"{name}_miss_rate"]    = torch.stack([missed_target[:, i], num_hit_inst[:, i]], dim=-1)
+        for i, name in enumerate(self.drum_names):
+            p_terms[f"{name}_success_rate"] = torch.stack([success[:, i], num_hit_drum[:, i]], dim=-1)
+            p_terms[f"{name}_wrong_rate"]   = torch.stack([wrong_hit[:, i], num_hit_drum[:, i]], dim=-1)
+            p_terms[f"{name}_miss_rate"]    = torch.stack([missed_target[:, i], num_hit_drum[:, i]], dim=-1)
 
         return reward, terms, p_terms
     
@@ -517,10 +516,10 @@ class RewardComputer:
         if is_update:
             eps = 1e-6
             success_ratio = self.n_success / (self.n_hit + eps)
-            self.w_inst_success = 1.0 / (success_ratio + eps)
+            self.w_drum_success = 1.0 / (success_ratio + eps)
 
             # 평균 1로 정규화
-            self.w_inst_success = (self.w_inst_success / self.w_inst_success.mean())
+            self.w_drum_success = (self.w_drum_success / self.w_drum_success.mean())
 
             self.n_success[:] = 0
             self.n_hit[:] = 0
