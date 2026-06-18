@@ -9,6 +9,7 @@ import torch
 import math
 
 from .specs import RobotSpec
+from .instruments import Instruments
 from .ik_solver import IKSolver
 
 @dataclass
@@ -38,7 +39,7 @@ class RobotInitializer:
             device: torch.device | str,
             cfg: RobotInitializerCfg,
             ctrl_joint_names: list,
-            instruments: dict,
+            instruments: Instruments,
             robot: RobotSpec,
     ):
         self.device = torch.device(device)
@@ -53,8 +54,8 @@ class RobotInitializer:
         N = len(self.cfg.drum_pairs)
         ik_solver = IKSolver(device=self.device, robot=self.robot)
 
-        inst_pos = torch.tensor(
-            list(self.instruments.values()),
+        drum_pos = torch.tensor(
+            [inst.position for inst in self.instruments.items.values()],
             device=self.device,
             dtype=torch.float32
         )   # (8, 3)
@@ -66,7 +67,7 @@ class RobotInitializer:
         )   # (N, 2)
         drum_pairs_idx = drum_pairs - 1
 
-        p = inst_pos[drum_pairs_idx, :]  # (N, 2, 3)
+        p = drum_pos[drum_pairs_idx, :]  # (N, 2, 3)
         pl = p[:, 0, :]     # (N, 3)
         pr = p[:, 1, :]
 

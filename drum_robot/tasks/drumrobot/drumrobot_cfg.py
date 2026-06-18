@@ -9,6 +9,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 
 import math # pi
+from dataclasses import dataclass, field
 
 USD_PATH = "/home/shy/RL_workspace/IsaacLab/source/extensions/drum_robot/drum_robot/assets/drum_robot/usd/drum_robot.usd"
 PRIM_PATH = "/World/envs/env_.*/Robot"   # env_.*를 써야 수백 개의 환경에 복제됩니다.
@@ -104,18 +105,8 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
         "right_wrist":          +1,
     }
 
-    # 악기의 x, y, z 좌표 (허리 조인트 기준)
-    instruments: dict[str, tuple[float, float, float]] = {
-        "snare":  (-0.100,  0.361,  -0.480),
-        "floor":  ( 0.232,  0.359,  -0.485),
-        "mid":    ( 0.216,  0.597,  -0.378),
-        "high":   (-0.069,  0.607,  -0.321),
-        "hihat":  (-0.292,  0.493,  -0.224),
-        "ride":   ( 0.326,  0.644,  -0.146),
-        "crash_r":( 0.485,  0.424,  -0.249),
-        "crash_l":(-0.184,  0.669,  -0.147),
-    }
-    inst_noise_scale: float = 0.02
+    # 드럼 위치 노이즈
+    drum_noise_scale: float = 0.02
 
     # 관측값 정규화 파라미터
     joint_vel_scale: float = 5.0

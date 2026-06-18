@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 @dataclass
 class EnvSpec:
     num_envs: int
-    num_drums: int
     episode_length_step: int
     max_lookahead_step: int
     hit_window_step: int
@@ -39,16 +38,10 @@ class RobotSpec:
         "right_wrist":          7,
     })
 
-@dataclass
-class DrumSpec:
-    # 악기의 x, y, z 좌표 (허리 조인트 기준)
-    position: dict[str, tuple[float, float, float]] = field(default_factory=lambda: {
-        "snare":  (-0.100,  0.361,  -0.480),
-        "floor":  ( 0.232,  0.359,  -0.485),
-        "mid":    ( 0.216,  0.597,  -0.378),
-        "high":   (-0.069,  0.607,  -0.321),
-        "hihat":  (-0.292,  0.493,  -0.224),
-        "ride":   ( 0.326,  0.644,  -0.146),
-        "crash_r":( 0.485,  0.424,  -0.249),
-        "crash_l":(-0.184,  0.669,  -0.147),
-    })
+    # 제어할 관절만
+    ctrl_joint_names: list = field(default_factory=lambda: [
+        "waist_joint",
+        "left_shoulder_1","left_shoulder_2","left_elbow",
+        "right_shoulder_1","right_shoulder_2","right_elbow",
+        "left_wrist","right_wrist",
+    ])

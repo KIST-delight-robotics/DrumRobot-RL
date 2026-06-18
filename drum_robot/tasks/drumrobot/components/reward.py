@@ -7,13 +7,14 @@ from __future__ import annotations
 import torch
 from dataclasses import dataclass
 
-from .specs import EnvSpec, DrumSpec
+from .specs import EnvSpec
+from .instruments import Instruments
 
 # === 모듈 레벨 jit 함수들 ===
 @torch.jit.script
 def assignment_reward_for_targets(
         target_mask: torch.Tensor,  # (N, M)
-        inst_pos: torch.Tensor,     # (N, M, 3)
+        drum_pos: torch.Tensor,     # (N, M, 3)
         left_tip_pos: torch.Tensor, # (N, 3)
         right_tip_pos: torch.Tensor,# (N, 3)
         tip_vel: torch.Tensor,      # (N, 2, 3)
@@ -40,8 +41,8 @@ def assignment_reward_for_targets(
     # --------------------
 
     # XYZ 거리
-    diff_l = left_tip_pos[:, None, :] - inst_pos    # (N, M, 3)
-    diff_r = right_tip_pos[:, None, :] - inst_pos
+    diff_l = left_tip_pos[:, None, :] - drum_pos    # (N, M, 3)
+    diff_r = right_tip_pos[:, None, :] - drum_pos
 
     dist_l = torch.sum(diff_l * diff_l, dim=-1)     # (N, M)
     dist_r = torch.sum(diff_r * diff_r, dim=-1)
@@ -150,7 +151,7 @@ def compute_reward_terms(
         right_tip_pos: torch.Tensor,    # (N, 3) [m]
         prev_left_tip_pos: torch.Tensor,
         prev_right_tip_pos: torch.Tensor,
-        inst_pos: torch.Tensor,         # (N, M, 3) [m]
+        drum_pos: torch.Tensor,         # (N, M, 3) [m]
         next_hits: torch.Tensor,        # (N, K, M+2)
 
         tip_vel: torch.Tensor,          # (N, 2, 3)
@@ -193,14 +194,14 @@ def compute_reward_terms(
     # -------------------------------------------------
     # proximity terms: nearest imminent target only
     # -------------------------------------------------
-    _, M, _ = inst_pos.shape
+    _, M, _ = drum_pos.shape
 
     nearest_target_mask = next_hits[:, 0, :M] > 0.5
     first_time = next_hits[:, 0, M]
 
     curr_cost, upward_reward, downward_reward = assignment_reward_for_targets(
         target_mask=nearest_target_mask,
-        inst_pos=inst_pos,
+        drum_pos=drum_pos,
         left_tip_pos=left_tip_pos,
         right_tip_pos=right_tip_pos,
         tip_vel=tip_vel,
@@ -209,7 +210,7 @@ def compute_reward_terms(
 
     prev_cost, _, _ = assignment_reward_for_targets(
         target_mask=nearest_target_mask,
-        inst_pos=inst_pos,
+        drum_pos=drum_pos,
         left_tip_pos=prev_left_tip_pos,
         right_tip_pos=prev_right_tip_pos,
         tip_vel=tip_vel,
@@ -237,11 +238,11 @@ def compute_reward_terms(
         | (right_tip_pos[:, 2] < z_limit)
     )
 
-    diff_xy_l = left_tip_pos[:, None, 0:2] - inst_pos[:, :, 0:2]    # (N, M, 2)
-    diff_xy_r = right_tip_pos[:, None, 0:2] - inst_pos[:, :, 0:2]
+    diff_xy_l = left_tip_pos[:, None, 0:2] - drum_pos[:, :, 0:2]    # (N, M, 2)
+    diff_xy_r = right_tip_pos[:, None, 0:2] - drum_pos[:, :, 0:2]
 
-    diff_z_l = left_tip_pos[:, None, 2] - inst_pos[:, :, 2]  # (N, M)
-    diff_z_r = right_tip_pos[:, None, 2] - inst_pos[:, :, 2]
+    diff_z_l = left_tip_pos[:, None, 2] - drum_pos[:, :, 2]  # (N, M)
+    diff_z_r = right_tip_pos[:, None, 2] - drum_pos[:, :, 2]
 
     dist_xy_l = torch.sum(diff_xy_l * diff_xy_l, dim=-1)     # (N, M)
     dist_xy_r = torch.sum(diff_xy_r * diff_xy_r, dim=-1)
@@ -366,15 +367,15 @@ class RewardComputer:
             self, device: torch.device | str,
             cfg: RewardComputerCfg,
             env: EnvSpec,
-            drum: DrumSpec,
     ):
         self.device = torch.device(device)
         self.cfg = cfg
         self.env = env
-        self.drum = drum
+        instruments = Instruments()
+        self.inst_names = list(instruments.items.keys())
 
         # 악기별 보상 가중치
-        M = env.num_drums
+        M = len(instruments.items)
         self.w_inst_success = torch.ones((1, M), device=self.device)
         self.n_success = torch.zeros((1, M), device=self.device)
         self.n_hit = torch.zeros((1, M), device=self.device)
@@ -387,7 +388,7 @@ class RewardComputer:
             time_error: torch.Tensor,
             tip_pos: torch.Tensor,
             prev_tip_pos: torch.Tensor,
-            inst_pos: torch.Tensor,
+            drum_pos: torch.Tensor,
             next_hits: torch.Tensor,
             tip_vel: torch.Tensor,
             hit_armed_for_reward: torch.Tensor,
@@ -412,7 +413,7 @@ class RewardComputer:
             right_tip_pos=tip_pos[:, 1, :],
             prev_left_tip_pos=prev_tip_pos[:, 0, :],
             prev_right_tip_pos=prev_tip_pos[:, 1, :],
-            inst_pos=inst_pos,
+            drum_pos=drum_pos,
             next_hits=next_hits,
 
             tip_vel=tip_vel,
@@ -500,7 +501,7 @@ class RewardComputer:
             "miss_rate": torch.stack([num_missed, num_hit], dim=-1),
         }
 
-        for i, name in enumerate(list(self.drum.position.keys())):
+        for i, name in enumerate(self.inst_names):
             p_terms[f"{name}_success_rate"] = torch.stack([success[:, i], num_hit_inst[:, i]], dim=-1)
             p_terms[f"{name}_wrong_rate"]   = torch.stack([wrong_hit[:, i], num_hit_inst[:, i]], dim=-1)
             p_terms[f"{name}_miss_rate"]    = torch.stack([missed_target[:, i], num_hit_inst[:, i]], dim=-1)

@@ -12,6 +12,7 @@ import random
 import time
 
 from .specs import EnvSpec
+from .instruments import Instruments
 
 GENERAL_MIDI_PERCUSSION_KEY_MAP = {
     35: "Acoustic Bass Drum",
@@ -126,6 +127,10 @@ class RDS:
         self.cfg = cfg
         self.env = env
 
+        # drum
+        instruments = Instruments()
+        self.num_drums = len(instruments.items)
+
         # midi
         random.seed(time.time_ns())
         self.rng = random.Random()
@@ -137,7 +142,7 @@ class RDS:
         # 목표 악보을 저장할 텐서
         N = env.num_envs
         T = env.episode_length_step
-        M = env.num_drums
+        M = self.num_drums
 
         self.rds = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
         self.rds_visit = torch.zeros((N, T, M), device=self.device, dtype=torch.bool)
@@ -338,7 +343,7 @@ class RDS:
     
     def _generate_rds_from_midi(self, prev_t):
         T = self.env.episode_length_step
-        M = self.env.num_drums
+        M = self.num_drums
 
         bpm = self.bpm
         events = self.events
@@ -451,7 +456,7 @@ class RDS:
     def _reset_random(self, env_ids):
         N = len(env_ids)
         T = self.env.episode_length_step
-        M = self.env.num_drums
+        M = self.num_drums
 
         rds_rand = torch.zeros((N, T, M), device=self.device, dtype=torch.int64)
 

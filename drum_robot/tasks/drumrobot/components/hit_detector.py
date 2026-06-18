@@ -4,10 +4,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import torch
+from dataclasses import dataclass
+from isaaclab.utils import math as math_utils
 
 from .specs import EnvSpec
+from .instruments import Instruments
 
 @dataclass
 class HitDetectorCfg:
@@ -31,15 +33,18 @@ class HitDetector:
         self.cfg = cfg
         self.env = env
 
+        instruments = Instruments()
+        self.num_drums = len(instruments.items)
+
         self._alloc_buffers()
         self.env_arange = torch.arange(self.env.num_envs, device=self.device)
 
     def detect_hit(
             self,
             tip_pos,
-            inst_pos,
+            drum_pos,
             hit_armed,
-    ):    
+    ):
         # 팁 속도
         alpha = self.cfg.alpha
         prev_tip_pos = self.tip_pos
@@ -47,7 +52,7 @@ class HitDetector:
         tip_vel = self._compute_tip_velocity(tip_pos, prev_tip_pos, prev_tip_vel, alpha)
 
         # 팁 드럼 거리 계산
-        dist_xy_sq, diff_z = self._compute_tip_drum_dist_sq(tip_pos, inst_pos)
+        dist_xy_sq, diff_z = self._compute_tip_drum_dist_sq(tip_pos, drum_pos)
 
         # 접촉 확인
         contact_mask = self._check_contact_drum(dist_xy_sq, diff_z)
@@ -113,15 +118,15 @@ class HitDetector:
 
         return tip_vel_f
     
-    def _compute_tip_drum_dist_sq(self, tip_pos, inst_pos):
-        # tip_pos: (N, 2, 3), inst_pos: (N, M, 3)
+    def _compute_tip_drum_dist_sq(self, tip_pos, drum_pos):
+        # tip_pos: (N, 2, 3), drum_pos: (N, M, 3)
         # N: num env, M: num drum
 
-        diff_xy = tip_pos[:, :, None, 0:2] - inst_pos[:, None, :, 0:2] # (N, 2, M, 2)
+        diff_xy = tip_pos[:, :, None, 0:2] - drum_pos[:, None, :, 0:2] # (N, 2, M, 2)
 
         dist_xy_sq = torch.sum(diff_xy * diff_xy, dim=-1)    # (N, 2, M)
 
-        diff_z = tip_pos[:, :, None, 2] - inst_pos[:, None, :, 2] # (N, 2, M)
+        diff_z = tip_pos[:, :, None, 2] - drum_pos[:, None, :, 2] # (N, 2, M)
 
         return dist_xy_sq, diff_z
     
@@ -160,7 +165,7 @@ class HitDetector:
 
         N = self.env.num_envs
         T = self.env.episode_length_step
-        M = self.env.num_drums
+        M = self.num_drums
         W = self.cfg.hit_window_step
 
         window_target_union = torch.zeros((N, M), device=self.device, dtype=torch.bool)
@@ -185,7 +190,7 @@ class HitDetector:
 
         N = self.env.num_envs
         T = self.env.episode_length_step
-        M = self.env.num_drums
+        M = self.num_drums
         W = self.cfg.hit_window_step
 
         success = torch.zeros((N, M), device=self.device, dtype=torch.bool)
