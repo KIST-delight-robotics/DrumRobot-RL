@@ -349,6 +349,9 @@ class RewardComputerCfg:
     w_tip_limit: float = 0.15
     w_under_drum: float = 0.08
 
+    # 악기별 가중치 업데이트 주기 (step)
+    update_interval: int = 100
+
 class RewardComputer:
     def __init__(
             self, device: torch.device | str,
@@ -362,6 +365,8 @@ class RewardComputer:
         self.drum_names = list(instruments.all.keys())
 
         # 악기별 보상 가중치
+        self.update_counter = 0
+
         M = len(instruments.all)
         self.w_drum_success = torch.ones((1, M), device=self.device)
         self.n_success = torch.zeros((1, M), device=self.device)
@@ -505,18 +510,26 @@ class RewardComputer:
             success: torch.Tensor,
             missed_target: torch.Tensor,
     ):
-        is_update = False
-        # 어려운 드럼에 더 큰 가중치
-        if is_update:
+        self.update_counter += 1
+
+        # 통계 누적
+        self.n_success += success.float().sum(dim=0)
+        self.n_hit += (
+            success.float().sum(dim=0)
+            + missed_target.float().sum(dim=0)
+        )
+
+        # 일정 횟수마다 업데이트
+        if self.update_counter % self.cfg.update_interval == 0:
             eps = 1e-6
             success_ratio = self.n_success / (self.n_hit + eps)
+
+            # 어려운 드럼일수록 큰 가중치
             self.w_drum_success = 1.0 / (success_ratio + eps)
 
             # 평균 1로 정규화
-            self.w_drum_success = (self.w_drum_success / self.w_drum_success.mean())
+            self.w_drum_success /= self.w_drum_success.mean()
 
-            self.n_success[:] = 0
-            self.n_hit[:] = 0
-        else:
-            self.n_success = self.n_success + success.float().sum(dim=0)
-            self.n_hit = self.n_hit + success.float().sum(dim=0) + missed_target.float().sum(dim=0)
+            # 통계 초기화
+            self.n_success.zero_()
+            self.n_hit.zero_()
