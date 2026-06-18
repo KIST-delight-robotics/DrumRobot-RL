@@ -7,8 +7,7 @@ from __future__ import annotations
 import torch
 from dataclasses import dataclass
 
-from .specs import EnvSpec
-from .instruments import Instruments
+from .specs import EnvSpec, Instruments
 
 # === 모듈 레벨 jit 함수들 ===
 @torch.jit.script

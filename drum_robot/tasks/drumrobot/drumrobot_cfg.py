@@ -78,44 +78,14 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     # Scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=128, env_spacing=2.0, replicate_physics=True)
 
-    """ 태스크 및 로봇 파라미터 """
-    # 관절 제한 범위
-    joint_limit: dict[str, tuple[float, float]] = {
-        "waist_joint":          (-90*math.pi/180,    90*math.pi/180),
-        "left_shoulder_1":      ( 30*math.pi/180,   180*math.pi/180),
-        "left_shoulder_2":      (-60*math.pi/180,    90*math.pi/180),
-        "left_elbow":           (  0*math.pi/180,   140*math.pi/180),
-        "right_shoulder_1":     (  0*math.pi/180,   150*math.pi/180),
-        "right_shoulder_2":     (-60*math.pi/180,    90*math.pi/180),
-        "right_elbow":          (  0*math.pi/180,   140*math.pi/180),
-        "left_wrist":           (-10*math.pi/180,    90*math.pi/180),
-        "right_wrist":          (-10*math.pi/180,    90*math.pi/180),
-    }
-
-    # 로봇 좌표계와 USD 파일의 방향 차이
-    joint_usd_dir: dict[str, int] = {
-        "waist_joint":          +1,
-        "left_shoulder_1":      -1,
-        "left_shoulder_2":      +1,
-        "left_elbow":           +1,
-        "right_shoulder_1":     -1,
-        "right_shoulder_2":     -1,
-        "right_elbow":          -1,
-        "left_wrist":           -1,
-        "right_wrist":          +1,
-    }
-
     # 드럼 위치 노이즈
     drum_noise_scale: float = 0.02
 
     # 관측값 정규화 파라미터
     joint_vel_scale: float = 5.0
 
-    num_hits: int = 3               # 최대 관측 타격 개수
-
-    # wrist link to tip
-    tip_offset_left: tuple[float, float, float] = (0.385, 0.0, -0.023)   # [m]
-    tip_offset_right: tuple[float, float, float] = (0.385, 0.0, -0.026)  # [m]
+    # 최대 관측 타격 개수
+    num_hits: int = 3
 
     """ 시각화 설정 """
     enable_visualization: bool = False

@@ -6,10 +6,8 @@ from __future__ import annotations
 
 import torch
 from dataclasses import dataclass
-from isaaclab.utils import math as math_utils
 
-from .specs import EnvSpec
-from .instruments import Instruments
+from .specs import EnvSpec, Instruments
 
 @dataclass
 class HitDetectorCfg:

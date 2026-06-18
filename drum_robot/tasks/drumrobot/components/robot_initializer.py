@@ -8,8 +8,7 @@ from dataclasses import dataclass, field
 import torch
 import math
 
-from .specs import RobotSpec
-from .instruments import Instruments
+from .specs import RobotSpec, Instruments
 from .ik_solver import IKSolver
 
 @dataclass
@@ -39,20 +38,18 @@ class RobotInitializer:
             device: torch.device | str,
             cfg: RobotInitializerCfg,
             ctrl_joint_names: list,
-            instruments: Instruments,
-            robot: RobotSpec,
     ):
         self.device = torch.device(device)
         self.cfg = cfg
         self.ctrl_joint_names = ctrl_joint_names
-        self.instruments = instruments
-        self.robot = robot
+        self.instruments = Instruments()
+        self.robot = RobotSpec()
 
         self._init_pos_angle()
 
     def _init_pos_angle(self):
         N = len(self.cfg.drum_pairs)
-        ik_solver = IKSolver(device=self.device, robot=self.robot)
+        ik_solver = IKSolver(device=self.device)
 
         drum_pos = torch.tensor(
             [inst.position for inst in self.instruments.items.values()],

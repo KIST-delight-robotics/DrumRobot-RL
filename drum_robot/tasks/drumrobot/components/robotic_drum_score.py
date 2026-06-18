@@ -11,8 +11,7 @@ from pathlib import Path
 import random
 import time
 
-from .specs import EnvSpec
-from .instruments import Instruments
+from .specs import EnvSpec, Instruments 
 
 GENERAL_MIDI_PERCUSSION_KEY_MAP = {
     35: "Acoustic Bass Drum",

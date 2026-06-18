@@ -14,10 +14,9 @@ from isaaclab.sim import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils import math as math_utils
 
 from .drumrobot_cfg import DrumRobotEnvCfg
-from .components.specs import EnvSpec, RobotSpec
-from .components.instruments import Instruments
+from .components.specs import EnvSpec, Instruments
+from .components.robot_interface import RobotInterface
 from .components.robotic_drum_score import RDSCfg, RDS
-from .components.robot_initializer import RobotInitializerCfg, RobotInitializer
 from .components.hit_detector import HitDetector, HitDetectorCfg
 from .components.reward import RewardComputerCfg, RewardComputer
 from .components.visualizer import VisualizerCfg, Visualizer
@@ -48,9 +47,6 @@ class DrumRobotEnv(DirectRLEnv):
             low=-np.inf, high=np.inf, shape=(self.cfg.observation_space,), dtype=np.float32
         )
 
-        # print("[DEBUG] action_space:", self.action_space)
-        # print("[DEBUG] observation_space:", self.observation_space)
-
         # dt
         self.dt = self.cfg.sim.dt * self.cfg.decimation
 
@@ -71,24 +67,6 @@ class DrumRobotEnv(DirectRLEnv):
         M = len(self.instruments.items)
         self.drum_pos = torch.zeros((N, M, 3), device=self.device, dtype=torch.float32)
 
-        # body/joint id resolve
-        robot_spec = RobotSpec()
-        ids, names = self.robot.find_joints(robot_spec.ctrl_joint_names)
-        
-        self.ctrl_joint_ids = ids       # 항상 articulation 순서
-        self.ctrl_joint_names = names
-        if len(self.ctrl_joint_ids) != len(robot_spec.ctrl_joint_names):
-            raise RuntimeError(f"ctrl_joint_ids mismatch: {len(self.ctrl_joint_ids)} (expected 9). names={self.ctrl_joint_names}")
-        
-        # print("[DEBUG] find_joints ids: ", self.ctrl_joint_ids)
-        # print("[DEBUG] find_joints names: ", self.ctrl_joint_names)
-
-        self._bind_body_ids()
-
-        self._load_config()  
-        self._alloc_buffers()   # 버퍼 할당
-        self._init_obs_norm_stats()  # 관측값 정규화를 위한 변수 초기화
-
         # spec
         hit_detector_cfg = HitDetectorCfg()
         rds_cfg = RDSCfg()
@@ -100,6 +78,35 @@ class DrumRobotEnv(DirectRLEnv):
             hit_window_step=hit_detector_cfg.hit_window_step,
             dt=self.dt,
         )
+
+        # robot
+        self.robot_interface = RobotInterface(
+            device=self.device,
+            env=env_specs,
+            robot=self.robot,
+            env_origins=self.scene.env_origins,
+        )
+        ################################################################
+        # # 양손 스틱 링크의 인덱스
+        # self.left_stick_idx = self._get_body_idx("left_wrist")  # 10
+        # self.right_stick_idx = self._get_body_idx("right_wrist")  # 11
+
+        # # 양손 하완 링크의 인덱스
+        # self.left_arm_idx = self._get_body_idx("left_elbow")  # 07
+        # self.right_arm_idx = self._get_body_idx("right_elbow")  # 08
+
+        # # offset wrist link to tip
+        # L_off = torch.tensor(self.cfg.tip_offset_left, device=self.device, dtype=torch.float32)  # (3,)
+        # R_off = torch.tensor(self.cfg.tip_offset_right, device=self.device, dtype=torch.float32)
+
+        # self.tip_offset_L = L_off.unsqueeze(0).expand(self.num_envs, 3)
+        # self.tip_offset_R = R_off.unsqueeze(0).expand(self.num_envs, 3)
+
+        #################################################################
+
+        self._load_config()  
+        self._alloc_buffers()   # 버퍼 할당
+        self._init_obs_norm_stats()  # 관측값 정규화를 위한 변수 초기화
 
         # 로그
         self.logger = EnvLogger(
@@ -113,19 +120,6 @@ class DrumRobotEnv(DirectRLEnv):
             device=self.device,
             cfg=rds_cfg,
             env=env_specs,
-        )
-
-        # 로봇 초기 위치 initializer
-        self.robot_initializer = RobotInitializer(
-            device=self.device,
-            cfg=RobotInitializerCfg(
-                num_ctrl_joint=len(self.ctrl_joint_names),
-                height_above_drum=0.1,
-                joint_noise_scale= 5*math.pi/180
-            ),
-            ctrl_joint_names=self.ctrl_joint_names,
-            instruments=self.instruments,
-            robot=robot_spec,
         )
 
         # 타격 감지
@@ -164,12 +158,10 @@ class DrumRobotEnv(DirectRLEnv):
 
     def _get_observations(self) -> dict:
         # 로봇의 관절 위치
-        usd_pos = self.robot.data.joint_pos[:, self.ctrl_joint_ids]        # (num_envs, 9)
-        joint_pos = self._convert_usd_to_robot(usd_pos)
+        joint_pos = self.robot_interface.get_joint_pos(self.robot)
 
         # 로봇의 관절 속도
-        usd_vel = self.robot.data.joint_vel[:, self.ctrl_joint_ids]        # (num_envs, 9)
-        joint_vel = self._convert_usd_to_robot(usd_vel)
+        joint_vel = self.robot_interface.get_joint_vel(self.robot)
 
         # 위치
         tip_pos = self.tip_pos
@@ -203,14 +195,12 @@ class DrumRobotEnv(DirectRLEnv):
         actions = torch.clamp(actions, -1.0, 1.0)
 
         # 로봇 위치 가져오기
-        usd_q = self.robot.data.joint_pos[:, self.ctrl_joint_ids]
-        robot_q = self._convert_usd_to_robot(usd_q)
+        robot_q = self.robot_interface.get_joint_pos(self.robot)
 
         # 목표 위치 = 현재 위치 + actions
         target_q_d = actions * self.cfg.action_scale
         robot_q_next = robot_q + target_q_d * self.dt
-        robot_q_next = torch.max(torch.min(robot_q_next, self.joint_high), self.joint_low)  # joint_limit 내로 clip
-        usd_q_next = self._convert_robot_to_usd(robot_q_next)
+        usd_q_next = self.robot_interface.clip_and_convert(robot_q_next)
 
         self.actions = actions.clone()
         self.target_joint_pos = usd_q_next
@@ -219,10 +209,12 @@ class DrumRobotEnv(DirectRLEnv):
             raise RuntimeError("NaN actions")
 
     def _apply_action(self):
-        self.robot.set_joint_position_target(self.target_joint_pos, joint_ids=self.ctrl_joint_ids)
+        ctrl_joint_ids = self.robot_interface.get_ctrl_joint_ids()
+        self.robot.set_joint_position_target(self.target_joint_pos, joint_ids=ctrl_joint_ids)
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        tip_pos = self._compute_tip_position()  # (N, 2, 3)
+        # tip_pos = self._compute_tip_position()  # (N, 2, 3)
+        tip_pos = self.robot_interface.get_body_pos(self.robot)
 
         (
             hit_mask,
@@ -274,10 +266,10 @@ class DrumRobotEnv(DirectRLEnv):
         return died, time_out
 
     def _get_rewards(self) -> torch.Tensor:
-        usd_pos = self.robot.data.joint_pos[:, self.ctrl_joint_ids]
-        usd_vel = self.robot.data.joint_vel[:, self.ctrl_joint_ids]
-        robot_pos = self._convert_usd_to_robot(usd_pos)  # (N, 9)
-        robot_vel = self._convert_usd_to_robot(usd_vel)
+        robot_pos = self.robot_interface.get_joint_pos(self.robot)
+        robot_vel = self.robot_interface.get_joint_vel(self.robot)
+
+        joint_low, joint_high = self.robot_interface.get_limit()
 
         reward, terms, p_terms = self.reward_computer.compute(
             success=self.success,
@@ -293,8 +285,8 @@ class DrumRobotEnv(DirectRLEnv):
             robot_vel=robot_vel,
             actions=self.actions,
             robot_pos=robot_pos,
-            joint_low=self.joint_low,
-            joint_high=self.joint_high,
+            joint_low=joint_low,
+            joint_high=joint_high,
         )
 
         # 로그 출력
@@ -320,16 +312,12 @@ class DrumRobotEnv(DirectRLEnv):
         self.rds.reset(env_ids=env_ids, score_ratio=0.0, selection_strength=0.0)  # 랜덤으로 RDS 생성해서 사용
 
         # 로봇 자세 리셋
-        default_joint_pos = self.robot.data.default_joint_pos[env_ids]  # 기본 자세 가져오기
-        default_joint_vel = self.robot.data.default_joint_vel[env_ids]
-
-        joint_pos = self._get_init_joint_pos(env_ids, default_joint_pos)
-        joint_vel = torch.zeros_like(default_joint_vel)
-        
+        joint_pos, joint_vel = self.robot_interface.reset(self.robot, env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # tip 리셋
-        self.tip_pos = self._compute_tip_position()
+        # self.tip_pos = self._compute_tip_position()
+        self.tip_pos = self.robot_interface.get_body_pos(self.robot)
         self.hit_detector.reset(env_ids, self.tip_pos)
  
         # 텐서 변수들 리셋
@@ -344,30 +332,7 @@ class DrumRobotEnv(DirectRLEnv):
     # ============================================================
 
     """ init """
-    def _bind_body_ids(self):
-        # print("[DEBUG] body_names: ", self.robot.data.body_names)
-
-        # 양손 스틱 링크의 인덱스
-        self.left_stick_idx = self._get_body_idx("left_wrist")  # 10
-        self.right_stick_idx = self._get_body_idx("right_wrist")  # 11
-
-        # 양손 하완 링크의 인덱스
-        self.left_arm_idx = self._get_body_idx("left_elbow")  # 07
-        self.right_arm_idx = self._get_body_idx("right_elbow")  # 08
-
-    def _get_body_idx(self, body_name) -> int:
-        ids, _ = self.robot.find_bodies(body_name) # ([id], ['body name'])
-        
-        if len(ids) == 0:
-            raise RuntimeError("wrist body not found. Check USD body names.")
-        
-        idx = ids[0] # int 값만 저장
-
-        return idx
-
     def _load_config(self):
-        self._build_joint_tensors()
-
         # obs 차원 계산
         M = len(self.instruments.items)
         K = self.cfg.num_hits
@@ -387,40 +352,6 @@ class DrumRobotEnv(DirectRLEnv):
 
         if obs_dim_total != self.cfg.observation_space:
             raise RuntimeError("observation space dim mismatch.")
-        
-        # offset wrist link to tip
-        L_off = torch.tensor(self.cfg.tip_offset_left, device=self.device, dtype=torch.float32)  # (3,)
-        R_off = torch.tensor(self.cfg.tip_offset_right, device=self.device, dtype=torch.float32)
-
-        self.tip_offset_L = L_off.unsqueeze(0).expand(self.num_envs, 3)
-        self.tip_offset_R = R_off.unsqueeze(0).expand(self.num_envs, 3)
-
-    def _build_joint_tensors(self):
-
-        """ 반드시 self.ctrl_joint_names 순서대로 텐서를 만들어여 함 """
-
-        # 관절 제한값
-        self.joint_low = torch.tensor(
-            [self.cfg.joint_limit[name][0] for name in self.ctrl_joint_names],
-            device=self.device,
-            dtype=torch.float32
-        ).unsqueeze(0)  # unsqueeze(n) n번째 차원에 1인 차원을 생성
-
-        self.joint_high = torch.tensor(
-            [self.cfg.joint_limit[name][1] for name in self.ctrl_joint_names],
-            device=self.device,
-            dtype=torch.float32
-        ).unsqueeze(0)
-
-        # 로봇 관절-USD 관절 방향
-        self.dir_tensor = torch.tensor(
-            [self.cfg.joint_usd_dir[name] for name in self.ctrl_joint_names],
-            device=self.device,
-            dtype=torch.float32
-        ).unsqueeze(0)
-
-        # print("[DEBUG] self.joint_low: ", self.joint_low)
-        # print("[DEBUG] self.joint_high: ", self.joint_high)
 
     def _alloc_buffers(self):
         N = self.num_envs
@@ -432,8 +363,9 @@ class DrumRobotEnv(DirectRLEnv):
 
     def _init_obs_norm_stats(self):
         # joint
-        self.joint_center = 0.5 * (self.joint_low + self.joint_high)
-        self.joint_half_range = 0.5 * (self.joint_high - self.joint_low) + 1e-6
+        joint_low, joint_high = self.robot_interface.get_limit()
+        self.joint_center = 0.5 * (joint_low + joint_high)
+        self.joint_half_range = 0.5 * (joint_high - joint_low) + 1e-6
 
         self.joint_vel_scale = torch.tensor(self.cfg.joint_vel_scale, device=self.device, dtype=torch.float32)
 
@@ -446,13 +378,6 @@ class DrumRobotEnv(DirectRLEnv):
         
         self.task_center = torch.cat([center], dim=0).unsqueeze(0).unsqueeze(1)          # (1, 1, 3)
         self.task_half_range = torch.cat([half_range], dim=0).unsqueeze(0).unsqueeze(1)  # (1, 1, 3)       
-
-    """ util """
-    def _convert_usd_to_robot(self, usd_data):
-        return self.dir_tensor * usd_data
-
-    def _convert_robot_to_usd(self, robot_data):
-        return self.dir_tensor * robot_data
 
     """ func (_get_observations) """
     def _normalize_and_pack_obs(self,
@@ -527,15 +452,6 @@ class DrumRobotEnv(DirectRLEnv):
         drum_pos[:, :, 2] = drum_pos[:, :, 2] + self.cfg.robot_waist_joint_offset_z
 
         self.drum_pos[env_ids] = drum_pos
-
-    def _get_init_joint_pos(self, env_ids, default_joint_pos):
-        joint_pos = default_joint_pos.clone()
-
-        init_pos = self.robot_initializer.reset_init_pos(env_ids)
-        usd_init_pos = self._convert_robot_to_usd(init_pos)
-        joint_pos[:,self.ctrl_joint_ids] = usd_init_pos
-
-        return joint_pos
 
     def _reset_tensors(self, env_ids):
         # 타격 상태 버퍼 리셋

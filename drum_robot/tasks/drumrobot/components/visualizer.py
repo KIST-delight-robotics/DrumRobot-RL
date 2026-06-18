@@ -11,8 +11,7 @@ import isaaclab.sim as sim_utils
 import omni.usd
 from pxr import UsdGeom, Gf
 
-from .specs import EnvSpec
-from .instruments import Instruments
+from .specs import EnvSpec, Instruments
 
 @dataclass
 class VisualizerCfg:

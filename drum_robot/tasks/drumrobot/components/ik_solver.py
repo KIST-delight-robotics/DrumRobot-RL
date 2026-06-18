@@ -7,17 +7,18 @@ from __future__ import annotations
 import torch
 import math
 
-from .specs import RobotSpec
+from .specs import PartLength
 
 class IKSolver:
-    def __init__(self, device: torch.device | str, robot: RobotSpec):
+    def __init__(self, device: torch.device | str):
 
         self.device = torch.device(device)
 
-        self.upper_arm = torch.tensor(robot.part_length.upper_arm, device=self.device, dtype=torch.float32)
-        self.lower_arm = torch.tensor(robot.part_length.lower_arm, device=self.device, dtype=torch.float32)
-        self.stick = torch.tensor(robot.part_length.stick, device=self.device, dtype=torch.float32)
-        self.waist = torch.tensor(robot.part_length.waist, device=self.device, dtype=torch.float32)
+        part_length = PartLength()
+        self.upper_arm = torch.tensor(part_length.upper_arm, device=self.device, dtype=torch.float32)
+        self.lower_arm = torch.tensor(part_length.lower_arm, device=self.device, dtype=torch.float32)
+        self.stick = torch.tensor(part_length.stick, device=self.device, dtype=torch.float32)
+        self.waist = torch.tensor(part_length.waist, device=self.device, dtype=torch.float32)
 
     def _get_length(self, theta: torch.Tensor) -> torch.Tensor:
 
