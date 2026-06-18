@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import torch                        # pyright: ignore[reportMissingImports]
 import isaaclab.sim as sim_utils    # pyright: ignore[reportMissingImports]
 import omni.usd                     # pyright: ignore[reportMissingImports]
-from pxr import UsdGeom, Gf
+from pxr import UsdGeom, Gf         # pyright: ignore[reportMissingImports]
 
 from .specs import EnvSpec, Instruments
 
