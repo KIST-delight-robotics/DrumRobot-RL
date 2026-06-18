@@ -128,7 +128,7 @@ class RDS:
         # util
         self.env_arange = torch.arange(self.env.num_envs, device=self.device)
     
-    def get_next_hits(self, step):
+    def get_next_hits(self, step: torch.Tensor) -> torch.Tensor:
         """
         현재 step 이후 max_lookahead_step 안에 있는 다음 K개 타격 이벤트를 반환.
 
@@ -199,16 +199,16 @@ class RDS:
 
         return next_hits
     
-    def set_rds_visit(self, steps, hit_mask):
+    def set_rds_visit(self, steps: torch.Tensor, hit_mask: torch.Tensor):
         self.rds_visit[self.env_arange, steps, :] = hit_mask    # 타격한 시간에 방문 처리
 
-    def get_rds(self):
+    def get_rds(self) -> torch.Tensor:
         return self.rds
     
-    def get_rds_visit(self):
+    def get_rds_visit(self) -> torch.Tensor:
         return self.rds_visit
 
-    def reset(self, env_ids, score_ratio=0.5, selection_strength=0.5):
+    def reset(self, env_ids: torch.Tensor, score_ratio: float=0.5, selection_strength: float=0.5):
         N = len(env_ids)
 
         num_score = int(N * score_ratio)
@@ -238,7 +238,7 @@ class RDS:
         self.rds_visit[env_ids] = False
 
     # ===== INIT =====
-    def _glob_midi_files(self):
+    def _glob_midi_files(self) -> list:
         folder = Path(self.cfg.midi_folder_path)
         midi_files = list(folder.glob("*.mid"))
 
@@ -247,7 +247,7 @@ class RDS:
 
         return midi_files
     
-    def _build_rds_dataset(self, midi_files):
+    def _build_rds_dataset(self, midi_files: list) -> torch.Tensor:
         rds_list = []
 
         for file_path in midi_files:
@@ -269,7 +269,7 @@ class RDS:
         
         return rds_tensors
 
-    def _read_midi_file(self, file_path):
+    def _read_midi_file(self, file_path) -> tuple[float, list]:
         mid = MidiFile(file_path)
         ticks_per_beat = mid.ticks_per_beat
 
@@ -401,7 +401,7 @@ class RDS:
         return score
     
     # ===== RESET =====
-    def _reset_midi(self, env_ids, selection_strength=0.5):
+    def _reset_midi(self, env_ids: torch.Tensor, selection_strength: float=0.5) -> torch.Tensor:
         weights = self.score.clone()
 
         # selection_strength 랜덤성 조절 (0 <= selection_strength < 1)
@@ -419,7 +419,7 @@ class RDS:
 
         return self.rds_dataset[idx]
 
-    def _reset_random(self, env_ids):
+    def _reset_random(self, env_ids: torch.Tensor) -> torch.Tensor:
         N = len(env_ids)
         T = self.env.episode_length_step
         M = self.num_drums

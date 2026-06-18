@@ -18,7 +18,7 @@ def _goal_terms(
         time_error: torch.Tensor,
         w_drum_success: torch.Tensor,
         k_accuracy: float,
-):
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     success_reward = (success.float() * w_drum_success).sum(dim=-1)
     wrong_cost   = wrong_hit.float().sum(dim=-1)
     missed_cost  = missed_target.float().sum(dim=-1)
@@ -170,7 +170,7 @@ def _proximity_terms(
         tip_vel: torch.Tensor,
         hit_armed: torch.Tensor,
         k_time_to_hit: float,
-):
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     M = drum_pos.shape[1]
 
     nearest_target_mask = next_hits[:, 0, :M] > 0.5
@@ -209,7 +209,7 @@ def _tip_position_penalties(
         z_limit: float,
         drum_xy_margin: float,
         drum_z_margin: float,
-):
+) -> tuple[torch.Tensor, torch.Tensor]:
     tip_limit_pen = (
         (left_tip_pos[:, 0] > x_limit)
         | (left_tip_pos[:, 0] < -x_limit)
@@ -249,7 +249,7 @@ def _global_penalties(
         joint_low: torch.Tensor,
         joint_high: torch.Tensor,
         limit_margin: float,
-):
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     action_l2 = torch.sum(action * action, dim=-1)
     joint_vel_l2 = torch.sum(joint_vel * joint_vel, dim=-1)
 
@@ -294,7 +294,7 @@ def compute_rewards(
         w_limit: float,
         w_tip_limit: float,
         w_under_drum: float,
-):
+) -> torch.Tensor:
     reward = (
         w_success * success_reward
         - w_wrong * wrong_cost
@@ -389,7 +389,7 @@ class RewardComputer:
             robot_pos: torch.Tensor,
             joint_low: torch.Tensor,
             joint_high: torch.Tensor,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # goal
         success_reward, wrong_cost, missed_cost, time_accuracy_reward = _goal_terms(
             success=success,

@@ -42,7 +42,7 @@ class IKSolver:
             theta0: torch.Tensor,   # (N, )
             theta7: torch.Tensor,   # (N, )
             theta8: torch.Tensor,   # (N, )
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
 
         err = torch.zeros_like(theta0)
 

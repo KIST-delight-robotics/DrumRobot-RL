@@ -39,14 +39,13 @@ class HitDetector:
 
     def detect_hit(
             self,
-            tip_pos,
-            drum_pos,
-    ):
+            tip_pos: torch.Tensor,
+            drum_pos: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # 팁 속도
-        alpha = self.cfg.alpha
         prev_tip_pos = self.tip_pos
         prev_tip_vel = self.tip_vel
-        tip_vel = self._compute_tip_velocity(tip_pos, prev_tip_pos, prev_tip_vel, alpha)
+        tip_vel = self._compute_tip_velocity(tip_pos=tip_pos, prev_tip_pos=prev_tip_pos, prev_tip_vel=prev_tip_vel)
 
         # 팁 드럼 거리 계산
         dist_xy_sq, diff_z = self._compute_tip_drum_dist_sq(tip_pos, drum_pos)
@@ -81,7 +80,13 @@ class HitDetector:
             prev_hit_armed, hit_per_arm,
         )
     
-    def get_result(self, hit_mask, steps, rds, rds_visit):
+    def get_result(
+            self,
+            hit_mask: torch.Tensor, 
+            steps: torch.Tensor,
+            rds: torch.Tensor,
+            rds_visit: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # 잘못친 타격 판정
         wrong_hit = self._detect_wrong_hits(hit_mask, rds, steps)
 
@@ -94,16 +99,16 @@ class HitDetector:
 
         return success, wrong_hit, missed_target, time_error
     
-    def reset(self, env_ids, tip_pos):
+    def reset(self, env_ids: torch.Tensor, tip_pos: torch.Tensor):
         # 팁 위치/속도 리셋
         self.tip_pos[env_ids] = tip_pos[env_ids]
         self.prev_tip_pos[env_ids] = tip_pos[env_ids]
         self.tip_vel[env_ids] = 0.0
 
         # 타격 상태 버퍼 리셋
-        self.hit_armed[env_ids] = True
+        self.hit_armed[env_ids] = False # 초기 상태는 준비 안됨. 이 후 스텝에서 갱신
 
-    def get_value_for_obs(self):
+    def get_value_for_obs(self) -> tuple[torch.Tensor, torch.Tensor]:
         return self.tip_pos, self.hit_armed
     
     def _alloc_buffers(self):
@@ -120,14 +125,14 @@ class HitDetector:
         # 타격 상태 버퍼
         self.hit_armed = torch.ones((N, 2, M), device=self.device, dtype=torch.bool)
     
-    def _compute_tip_velocity(self, tip_pos, prev_tip_pos, prev_tip_vel, alpha):
+    def _compute_tip_velocity(self, tip_pos: torch.Tensor, prev_tip_pos: torch.Tensor, prev_tip_vel: torch.Tensor) -> torch.Tensor:
         tip_vel = (tip_pos - prev_tip_pos) / self.env.step_dt
 
-        tip_vel_f = (1 - alpha) * tip_vel + alpha * prev_tip_vel
+        tip_vel_f = (1 - self.cfg.alpha) * tip_vel + self.cfg.alpha * prev_tip_vel
 
         return tip_vel_f
     
-    def _compute_tip_drum_dist_sq(self, tip_pos, drum_pos):
+    def _compute_tip_drum_dist_sq(self, tip_pos: torch.Tensor, drum_pos: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # tip_pos: (N, 2, 3), drum_pos: (N, M, 3)
         # N: num env, M: num drum
 
@@ -139,7 +144,7 @@ class HitDetector:
 
         return dist_xy_sq, diff_z
     
-    def _check_contact_drum(self, dist_xy_sq, diff_z):
+    def _check_contact_drum(self, dist_xy_sq: torch.Tensor, diff_z: torch.Tensor) -> torch.Tensor:
         # N: num env, M: num drum
         # xy 범위 확인
         radius_sq = self.cfg.drum_xy_radius ** 2
@@ -152,7 +157,7 @@ class HitDetector:
 
         return contact_mask
 
-    def _check_hitting(self, contact_mask, hit_armed, tip_vel, diff_z):
+    def _check_hitting(self, contact_mask: torch.Tensor, hit_armed: torch.Tensor, tip_vel: torch.Tensor, diff_z: torch.Tensor) -> torch.Tensor:
         # contact_mask: (N, 2, M)
         # hit_armed:    (N, 2, M)
         # tip_vel:      (N, 2, 3)
@@ -167,7 +172,7 @@ class HitDetector:
 
         return hit_per_arm
 
-    def _detect_wrong_hits(self, hit_mask, rds, steps):
+    def _detect_wrong_hits(self, hit_mask: torch.Tensor, rds: torch.Tensor, steps: torch.Tensor) -> torch.Tensor:
         # hit_mask: (N, M)
         # rds: (N, T, M)
         # steps: (N,)
@@ -193,7 +198,7 @@ class HitDetector:
 
         return wrong_hit
 
-    def _finalize_target_outcomes(self, rds, rds_visit, steps):
+    def _finalize_target_outcomes(self, rds: torch.Tensor, rds_visit: torch.Tensor, steps: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # rds, rds_visit: (N, T, M)
         # steps: (N,)
 
@@ -230,7 +235,7 @@ class HitDetector:
         
         return success, missed_target, time_error
 
-    def _get_hit_window_offsets(self, W):
+    def _get_hit_window_offsets(self, W: int) -> list:
         offsets = [0]
         for i in range(1, W + 1):
             offsets.append(-i)
@@ -238,7 +243,7 @@ class HitDetector:
 
         return offsets
 
-    def _check_rearm(self, prev_hit_armed, contact_mask, diff_z):
+    def _check_rearm(self, prev_hit_armed: torch.Tensor, contact_mask: torch.Tensor, diff_z: torch.Tensor) -> torch.Tensor:
         """
         준비
 

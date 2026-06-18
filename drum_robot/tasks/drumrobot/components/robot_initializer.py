@@ -88,7 +88,7 @@ class RobotInitializer:
             idx = self.robot.joint_name_to_ik_result_idx[name]
             self.pos_angle[:, i] = out[:, idx]
     
-    def reset_init_pos(self, env_ids):
+    def reset_init_pos(self, env_ids: torch.Tensor) -> torch.Tensor:
         N = len(self.cfg.drum_pairs)
 
         rand = torch.randint(0, N, (len(env_ids),), device=self.device)

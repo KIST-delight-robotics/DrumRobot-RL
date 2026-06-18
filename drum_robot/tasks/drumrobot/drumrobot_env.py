@@ -153,7 +153,7 @@ class DrumRobotEnv(DirectRLEnv):
         drum_pos = self.drum_pos
 
         # 다음 타격
-        self.next_hits = self.rds.get_next_hits(step=self.steps)
+        self.next_hits = self.rds.get_next_hits(self.steps)
 
         obs = self._normalize_and_pack_obs(
             joint_pos=joint_pos,
@@ -209,22 +209,19 @@ class DrumRobotEnv(DirectRLEnv):
             hit_mask,
             tip_vel, prev_tip_pos,
             prev_hit_armed, hit_per_arm,
-        ) = self.hit_detector.detect_hit(
-            tip_pos,
-            self.drum_pos,
-        )
+        ) = self.hit_detector.detect_hit(tip_pos=tip_pos, drum_pos=self.drum_pos)
 
         # 타격 시간 기록
-        self.rds.set_rds_visit(self.steps, hit_mask)
+        self.rds.set_rds_visit(steps=self.steps, hit_mask=hit_mask)
 
         # 결과
         rds = self.rds.get_rds()
         rds_visit = self.rds.get_rds_visit()
         success, wrong_hit, missed_target, time_error = self.hit_detector.get_result(
-            hit_mask,
-            self.steps,
-            rds,
-            rds_visit,
+            hit_mask=hit_mask,
+            steps=self.steps,
+            rds=rds,
+            rds_visit=rds_visit,
         )
 
         # 관절각, 관절 속도
@@ -252,7 +249,7 @@ class DrumRobotEnv(DirectRLEnv):
         )
 
         # 가중치 업데이트
-        self.reward_computer.update_difficulty_weights(success, missed_target)
+        self.reward_computer.update_difficulty_weights(success=success, missed_target=missed_target)
 
         # 로그 출력
         self.logger.add(log_terms)
@@ -260,7 +257,7 @@ class DrumRobotEnv(DirectRLEnv):
         self.logger.maybe_flush()
 
         # 시각화 (타격 표시, 드럼 색상 변경)
-        self.visualizer.step(tip_pos, self.next_hits, hit_per_arm)
+        self.visualizer.step(tip_pos=tip_pos, next_hits=self.next_hits, hit_per_arm=hit_per_arm)
 
         if torch.isnan(reward).any():
             raise RuntimeError("NaN reward")
@@ -281,12 +278,12 @@ class DrumRobotEnv(DirectRLEnv):
 
         # 로봇 자세 리셋
         init_robot_pos = self.robot_initializer.reset_init_pos(env_ids)
-        joint_pos, joint_vel = self.robot_interface.reset(self.robot, env_ids, init_robot_pos)
+        joint_pos, joint_vel = self.robot_interface.reset(robot=self.robot, env_ids=env_ids, init_robot_pos=init_robot_pos)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # tip 리셋
         tip_pos = self.robot_interface.get_body_pos(self.robot)
-        self.hit_detector.reset(env_ids, tip_pos)
+        self.hit_detector.reset(env_ids=env_ids, tip_pos=tip_pos)
  
         # 텐서 변수들 리셋
         self._reset_tensors(env_ids)
@@ -340,13 +337,13 @@ class DrumRobotEnv(DirectRLEnv):
 
     """ func (_get_observations) """
     def _normalize_and_pack_obs(self,
-            joint_pos,
-            joint_vel,
-            tip_pos,
-            drum_pos,
-            next_hits,
-            hit_armed,
-            ) -> torch.Tensor:
+            joint_pos: torch.Tensor,
+            joint_vel: torch.Tensor,
+            tip_pos: torch.Tensor,
+            drum_pos: torch.Tensor,
+            next_hits: torch.Tensor,
+            hit_armed: torch.Tensor,
+        ) -> torch.Tensor:
         # joint_pos, joint_vel: (N, 9)
         # tip_pos: (N, 2, 3)
         # drum_pos: (N, M, 3)
@@ -381,7 +378,7 @@ class DrumRobotEnv(DirectRLEnv):
         return obs
 
     """ func (_reset_idx) """
-    def _reset_drum(self, env_ids):
+    def _reset_drum(self, env_ids: torch.Tensor):
         # 각 env/각 에피소드에서 악기 위치
         drum_pos = self.default_drum_pos.unsqueeze(0).repeat(len(env_ids), 1, 1)  # (M, 3) -차원 추가-> (1, M, 3) -복제-> (N, M, 3)
         drum_pos = drum_pos + self.instruments.drum_noise_scale * torch.randn_like(drum_pos)
@@ -389,6 +386,6 @@ class DrumRobotEnv(DirectRLEnv):
 
         self.drum_pos[env_ids] = drum_pos
 
-    def _reset_tensors(self, env_ids):
+    def _reset_tensors(self, env_ids: torch.Tensor):
         # 스텝 리셋
         self.steps[env_ids] = 0 # torch.randint(0, 9, (len(env_ids),), device=self.device)

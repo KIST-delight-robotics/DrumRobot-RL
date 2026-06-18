@@ -47,17 +47,17 @@ class Visualizer():
     # =========================================================
     # Public Interface
     # =========================================================
-    def init_visualization(self, drum_names):
+    def init_visualization(self, drum_names: list):
         if self.cfg.enable_visualization:
             self._init_drum(drum_names)
             self._init_hit_marker()
     
-    def step(self, tip_pos, next_hits, hit_per_arm):
+    def step(self, tip_pos: torch.Tensor, next_hits: torch.Tensor, hit_per_arm: torch.Tensor):
         if self.cfg.enable_visualization:
             self._update_drum_color(next_hits)
             self._translate_hit_marker(tip_pos, hit_per_arm)
     
-    def reset(self, drum_pos):
+    def reset(self, drum_pos: torch.Tensor):
         if self.cfg.enable_visualization:
             self._translate_drum(drum_pos)
         
@@ -97,7 +97,7 @@ class Visualizer():
 
             self._hit_marker_translate_ops.append(t_op)
 
-    def _update_drum_color(self, next_hits):
+    def _update_drum_color(self, next_hits: torch.Tensor):
         M = self.num_drums
         L = self.env.max_lookahead_step
         W = self.env.hit_window_step
@@ -131,7 +131,7 @@ class Visualizer():
             self._color(far_ids, far_color)
             self._color(none_ids, base_color)
 
-    def _translate_hit_marker(self, tip_pos_per_arm, hit_per_arm):
+    def _translate_hit_marker(self, tip_pos_per_arm: torch.Tensor, hit_per_arm: torch.Tensor):
         # tip_pos:      (N, 2, 3)
         # hit_per_arm:  (N, 2, M)
         hit_mask_per_arm = torch.any(hit_per_arm, dim=2)    # (N, 2)
@@ -154,7 +154,7 @@ class Visualizer():
             self._translate(hidden_ids, hidden_pos)
             self._translate(hit_ids, tip_pos[hit_mask])
 
-    def _translate_drum(self, drum_pos):
+    def _translate_drum(self, drum_pos: torch.Tensor):
         for i in range(self.num_drums):
             p = drum_pos[:, i, :]
             self._translate(self._drum_translate_ops[i], p)
@@ -162,7 +162,7 @@ class Visualizer():
     # =========================================================
     # USD Primitives  (IsaacSim USD Stage 저수준 조작)
     # =========================================================
-    def _create_sphere(self, node_name, radius, color):
+    def _create_sphere(self, node_name: str, radius: float, color: tuple[float, float, float]) -> tuple[list, list]:
         # 고속 업데이트를 위한 오퍼레이터 캐시
         translate_ops = []
         color_ops = []
@@ -217,7 +217,7 @@ class Visualizer():
 
         return translate_ops, color_ops
 
-    def _create_cylinder(self, node_name, radius, height, color):
+    def _create_cylinder(self, node_name: str, radius: float, height: float, color: tuple[float, float, float]) -> tuple[list, list]:
         # 고속 업데이트를 위한 오퍼레이터 캐시
         translate_ops = []
         color_ops = []
@@ -268,7 +268,7 @@ class Visualizer():
 
         return translate_ops, color_ops
 
-    def _translate(self, t_op, pos):
+    def _translate(self, t_op: list, pos: torch.Tensor):
         n = len(pos[:,0])
 
         for i in range(n):
@@ -277,7 +277,7 @@ class Visualizer():
                 Gf.Vec3f(float(p[0]), float(p[1]), float(p[2]))
             )
 
-    def _color(self, c_op, color):
+    def _color(self, c_op: list, color: torch.Tensor):
         n = len(color[:,0])
 
         for i in range(n):

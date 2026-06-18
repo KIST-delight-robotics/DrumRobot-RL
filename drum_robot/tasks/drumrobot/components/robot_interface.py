@@ -63,19 +63,19 @@ class RobotInterface:
             dtype=torch.float32
         ).unsqueeze(0)
     
-    def get_joint_pos(self, robot):
+    def get_joint_pos(self, robot: Articulation) -> torch.Tensor:
         # 로봇의 관절 위치
         usd_pos = robot.data.joint_pos[:, self.ctrl_joint_ids]        # (num_envs, 9)
         joint_pos = self._convert_usd_to_robot(usd_pos)
         return joint_pos
     
-    def get_joint_vel(self, robot):
+    def get_joint_vel(self, robot: Articulation) -> torch.Tensor:
         # 로봇의 관절 속도
         usd_vel = robot.data.joint_vel[:, self.ctrl_joint_ids]        # (num_envs, 9)
         joint_vel = self._convert_usd_to_robot(usd_vel)
         return joint_vel
     
-    def clip_and_convert(self, q):
+    def clip_and_convert(self, q: torch.Tensor) -> torch.Tensor:
         # clip
         robot_q = torch.max(torch.min(q, self.joint_high), self.joint_low)
 
@@ -90,7 +90,7 @@ class RobotInterface:
     def get_ctrl_joint_name(self):
         return self.ctrl_joint_names
     
-    def get_body_pos(self, robot):
+    def get_body_pos(self, robot: Articulation) -> torch.Tensor:
         # 스틱 링크의 월드 좌표계 위치 가져오기
         all_body_pos = robot.data.body_pos_w       # (N, num_bodies, 3)
         all_body_quat = robot.data.body_quat_w     # (N, num_bodies, 4)  (w,x,y,z)인 경우가 많음
@@ -124,10 +124,10 @@ class RobotInterface:
 
         return tip_pos
     
-    def get_limit(self):
+    def get_limit(self) -> tuple[torch.Tensor, torch.Tensor]:
         return self.joint_low, self.joint_high
     
-    def reset(self, robot, env_ids, init_robot_pos):
+    def reset(self, robot: Articulation, env_ids: torch.Tensor, init_robot_pos: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         default_joint_pos = robot.data.default_joint_pos[env_ids]  # 기본 자세 가져오기
         default_joint_vel = robot.data.default_joint_vel[env_ids]
 
@@ -139,7 +139,7 @@ class RobotInterface:
 
         return joint_pos, joint_vel
 
-    def _get_body_idx(self, robot, body_name) -> int:
+    def _get_body_idx(self, robot: Articulation, body_name: str) -> int:
         ids, _ = robot.find_bodies(body_name) # ([id], ['body name'])
         
         if len(ids) == 0:
@@ -149,8 +149,8 @@ class RobotInterface:
 
         return idx
     
-    def _convert_usd_to_robot(self, usd_data):
+    def _convert_usd_to_robot(self, usd_data: torch.Tensor) -> torch.Tensor:
         return self.dir_tensor * usd_data
 
-    def _convert_robot_to_usd(self, robot_data):
+    def _convert_robot_to_usd(self, robot_data: torch.Tensor) -> torch.Tensor:
         return self.dir_tensor * robot_data
