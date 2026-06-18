@@ -101,7 +101,7 @@ class HitDetector:
         self.tip_vel[env_ids] = 0.0
 
         # 타격 상태 버퍼 리셋
-        self.hit_armed[env_ids] = True  # 초기 상태는 준비 안됨. 이 후 스텝에서 갱신
+        self.hit_armed[env_ids] = False  # 초기 상태는 준비 안됨. 이 후 스텝에서 갱신
 
     def get_value_for_obs(self):
         return self.tip_pos, self.hit_armed
