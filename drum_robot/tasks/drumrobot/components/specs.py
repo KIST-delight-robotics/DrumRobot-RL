@@ -17,7 +17,7 @@ class EnvRuntimeSpec:
 
 @dataclass
 class PartLength:
-    upper_arm: float = 0.2303
+    upper_arm: float = 0.230
     lower_arm: float = 0.200
     stick: float = 0.325 + 0.048
     waist: float = 0.520
