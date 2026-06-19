@@ -1,37 +1,33 @@
 # DrumRobot — 강화학습 기반 드럼 연주 로봇
 
-**Isaac Lab + skrl(PPO)** 를 사용해 양팔 9-DOF 로봇이 MIDI 악보를 따라 드럼을 연주하도록 훈련하는 강화학습 프로젝트.
+**Isaac Lab** 를 사용해 양팔 9-DOF 로봇이 MIDI 악보를 따라 드럼을 연주하도록 훈련하는 강화학습 프로젝트.
+
+## 개발 환경
 
 | 항목 | 내용 |
 |------|------|
-| 시뮬레이터 | NVIDIA Isaac Sim 4.5 / Isaac Lab 2.3.0 |
-| RL 프레임워크 | skrl 1.4.3+ (PPO) |
-| 로봇 자유도 | 9-DOF (허리 1 + 양팔 8) |
-| 악기 수 | 8 (스네어, 플로어/미드/하이 톰, 하이햇, 라이드, 크래시 ×2) |
-| 에피소드 | 5초 (300 step, 60Hz 정책) |
+| OS | Ubuntu 22.04.5 |
+| GPU | RTX 4070 SUPER |
+| CUDA | 12.8 |
+| Driver | 580.x |
+| Isaac Sim | 4.5 |
+| Isaac Lab | 2.3.0 |
+| Python | 3.10 |
+| RL 프레임워크 | skrl 1.4.3+ |
 
 ---
 
 ## 문서
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 코드 구조, 데이터 흐름, 설계 결정.
-- [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) — 현재 baseline에 이르기까지의 시행착오 압축본.
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — 학습 실행, 로그 위치, 알려진 사고 사례.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — 미해결 문제와 가설 백로그.
+- [Isaac Lab 공식 문서](https://isaac-sim.github.io/IsaacLab/main/source/setup/ecosystem.html)
+
+- [Isaac Lab Github Code](https://github.com/isaac-sim/IsaacLab)
+
+- [SKRL 공식 문서](https://skrl.readthedocs.io/en/latest/#)
+
+- [한국어 튜토리얼](https://wikidocs.net/book/18009)
 
 ---
-
-## 개발 환경
-
-```
-OS         : Ubuntu 22.04.5
-GPU        : RTX 4070 SUPER
-CUDA       : 12.8
-Driver     : 580.x
-Isaac Sim  : 4.5
-Isaac Lab  : 2.3.0
-Python     : 3.10
-```
 
 ## 환경 구축
 
