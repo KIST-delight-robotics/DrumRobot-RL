@@ -388,4 +388,4 @@ class DrumRobotEnv(DirectRLEnv):
 
     def _reset_tensors(self, env_ids: torch.Tensor):
         # 스텝 리셋
-        self.steps[env_ids] = 0 # torch.randint(0, 9, (len(env_ids),), device=self.device)
+        self.steps[env_ids] = 0

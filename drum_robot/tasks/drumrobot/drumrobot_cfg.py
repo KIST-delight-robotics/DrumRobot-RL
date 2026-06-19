@@ -29,6 +29,9 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
     state_space: int = 0
     action_scale: float = math.pi
 
+    # 관측값 정규화
+    joint_vel_scale: float = 5.0
+
     # Simulation
     sim: SimulationCfg = SimulationCfg(
         dt=SIM_DT, 
@@ -77,6 +80,3 @@ class DrumRobotEnvCfg(DirectRLEnvCfg):
 
     # Scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=128, env_spacing=2.0, replicate_physics=True)
-
-    # 관측값 정규화 파라미터
-    joint_vel_scale: float = 5.0
