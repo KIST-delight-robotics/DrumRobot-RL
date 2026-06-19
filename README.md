@@ -140,14 +140,7 @@ source/extensions/drum_robot/drum_robot/
 │   ├── agents/
 │   │   └── skrl_ppo_cfg.yaml                # PPO 하이퍼파라미터
 │   └── components/                          # 환경 내부 컴포넌트
-│       ├── hit_detector.py                  # 타격 판정 및 결과 매칭
-│       ├── reward.py                        # 보상 계산
-│       ├── robotic_drum_score.py            # MIDI 악보(RDS) 관리
-│       ├── robot_interface.py               # USD↔로봇 좌표 변환, 관절·팁 접근
-│       ├── robot_initializer.py             # 초기 자세 생성
-│       ├── ik_solver.py                     # 기하학적 IK
-│       ├── specs.py                         # 공유 dataclass (로봇·드럼 상수)
-│       └── visualizer.py                    # 시각화 (팁 마커, 드럼 색)
+│       └── ...
 │
 └── utils/
     └── logger.py                            # 학습 로그 누적·출력
