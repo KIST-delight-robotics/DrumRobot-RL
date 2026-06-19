@@ -20,11 +20,8 @@
 ## 문서
 
 - [Isaac Lab 공식 문서](https://isaac-sim.github.io/IsaacLab/main/source/setup/ecosystem.html)
-
 - [Isaac Lab Github Code](https://github.com/isaac-sim/IsaacLab)
-
 - [SKRL 공식 문서](https://skrl.readthedocs.io/en/latest/#)
-
 - [한국어 튜토리얼](https://wikidocs.net/book/18009)
 
 ---
@@ -120,4 +117,38 @@ tensorboard --logdir logs/
   --task=DrumRobot-drum_robot-Direct-v0 \
   --num_envs=1 \
   --checkpoint="logs/skrl/drum_robot/.../checkpoints/agent_XX.pt"
+```
+
+---
+
+## 디렉토리 구조 트리
+
+```
+source/extensions/drum_robot/drum_robot/
+├── assets/drum_robot/                       # 로봇·드럼 자산
+│   ├── config/                              # robot articulation cfg
+│   ├── urdf/                                # URDF 원본
+│   └── usd/                                 # IsaacSim 용 USD
+│
+├── scripts/reinforcement_learning/skrl/     # 학습·평가 진입 스크립트
+│   ├── train.py
+│   └── play.py
+│
+├── tasks/drumrobot/                         # RL 환경 정의
+│   ├── drumrobot_env.py                     # DirectRLEnv 본체 (오케스트레이터)
+│   ├── drumrobot_cfg.py                     # 환경 cfg
+│   ├── agents/
+│   │   └── skrl_ppo_cfg.yaml                # PPO 하이퍼파라미터
+│   └── components/                          # 환경 내부 컴포넌트
+│       ├── hit_detector.py                  # 타격 판정 및 결과 매칭
+│       ├── reward.py                        # 보상 계산
+│       ├── robotic_drum_score.py            # MIDI 악보(RDS) 관리
+│       ├── robot_interface.py               # USD↔로봇 좌표 변환, 관절·팁 접근
+│       ├── robot_initializer.py             # 초기 자세 생성
+│       ├── ik_solver.py                     # 기하학적 IK
+│       ├── specs.py                         # 공유 dataclass (로봇·드럼 상수)
+│       └── visualizer.py                    # 시각화 (팁 마커, 드럼 색)
+│
+└── utils/
+    └── logger.py                            # 학습 로그 누적·출력
 ```
