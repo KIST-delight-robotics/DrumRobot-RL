@@ -430,10 +430,25 @@ class RDS:
         e = T - self.env.hit_window_step
 
         k = 10
+        ### 윈도우 겹침 문제 해결 - 새로운 변수 정의############################
+        W = self.env.hit_window_step
+        min_gap = 2*W+1
+        hit_zone_width = max(1, (e - s - (k - 1) * min_gap) // k)
+        #################################################################
+
         for i in range(k):
-            si = (int)(s + (2 * i) * (e - s) / (2 * k - 1))
-            ei = (int)(s + (2 * i + 1) * (e - s) / (2 * k - 1))
-            time_rand = torch.randint(si, ei, (N,), device=self.device)
+            #si = (int)(s + (2 * i) * (e - s) / (2 * k - 1))
+            #ei = (int)(s + (2 * i + 1) * (e - s) / (2 * k - 1)) 
+            #time_rand = torch.randint(si, ei, (N,), device=self.device) #기존코드
+
+            ###########################윈도우 겹침 문제 해결###########################
+            si = s + i * (hit_zone_width + min_gap)
+            ei = si + hit_zone_width
+            if ei > e:
+                break
+            time_rand = torch.randint(si, max(si + 1, ei), (N,), device=self.device)
+            ########################################################################
+
             drum_rand = torch.randint(0, M, (N,), device=self.device)
 
             rds_rand[torch.arange(N), time_rand, drum_rand] = 1

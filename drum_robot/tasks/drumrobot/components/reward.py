@@ -340,11 +340,11 @@ class RewardComputerCfg:
     w_progress: float = 4.0
     w_proximity: float = 1.5
 
-    w_upward: float = 0.35
-    w_downward: float = 0.30
+    w_upward: float = 0.5 #0.35
+    w_downward: float = 0.4 #0.30
 
-    w_action: float = 0.0005
-    w_joint_vel: float = 0.0003
+    w_action: float = 0.00005 #0.0005
+    w_joint_vel: float = 0.00003 #0.0003
     w_limit: float = 0.5
     w_tip_limit: float = 0.15
     w_under_drum: float = 0.08

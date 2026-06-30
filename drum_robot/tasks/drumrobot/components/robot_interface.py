@@ -32,6 +32,7 @@ class RobotInterface:
             raise RuntimeError(f"ctrl_joint_ids mismatch: {len(self.ctrl_joint_ids)} (expected 9). names={self.ctrl_joint_names}")
         
         self.body_to_idx = {name: self._get_body_idx(robot, name) for name in robot.data.body_names}
+        print("body_names:", list(self.body_to_idx.keys()))
 
         # offset wrist link to tip
         L_off = torch.tensor(self.robot_spec.tip_offset_left, device=self.device, dtype=torch.float32)  # (3,)
