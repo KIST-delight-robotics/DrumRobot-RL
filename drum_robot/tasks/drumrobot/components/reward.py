@@ -199,6 +199,61 @@ def _proximity_terms(
     return proximity_cost, progress_reward, upward_reward, downward_reward
 
 @torch.jit.script
+def _self_collision_penalty(
+        elbow_l: torch.Tensor,  # (N, 3) 왼쪽 전완 시작 (elbow)
+        wrist_l: torch.Tensor,  # (N, 3) 왼쪽 전완 끝 (wrist)
+        elbow_r: torch.Tensor,  # (N, 3) 오른쪽 전완 시작 (elbow)
+        wrist_r: torch.Tensor,  # (N, 3) 오른쪽 전완 끝 (wrist)
+        threshold: float,
+) -> tuple[torch.Tensor, torch.Tensor]:  # (penalty (N,), dist (N,))
+    # 두 전완(elbow→wrist)을 선분으로 보고 선분 간 최소 거리 계산
+    d1 = wrist_l - elbow_l  # (N, 3)
+    d2 = wrist_r - elbow_r  # (N, 3)
+    r  = elbow_l - elbow_r  # (N, 3)
+
+    a = (d1 * d1).sum(-1)  # (N,)
+    e = (d2 * d2).sum(-1)
+    b = (d1 * d2).sum(-1)
+    c = (d1 * r ).sum(-1)
+    f = (d2 * r ).sum(-1)
+
+    eps = 1e-8
+    denom = a * e - b * b
+
+    s0 = torch.clamp((b * f - c * e) / (denom + eps), 0.0, 1.0)
+    t0 = (b * s0 + f) / (e + eps)
+
+    # t0가 [0,1] 밖으로 나간 경우 각 끝점에 대해 s 재계산
+    s_at_t0 = torch.clamp(-c / (a + eps), 0.0, 1.0)
+    s_at_t1 = torch.clamp((b - c) / (a + eps), 0.0, 1.0)
+
+    s = torch.where(t0 < 0.0, s_at_t0, torch.where(t0 > 1.0, s_at_t1, s0))
+    t = torch.clamp(t0, 0.0, 1.0)
+
+    closest_l = elbow_l + s.unsqueeze(-1) * d1  # (N, 3)
+    closest_r = elbow_r + t.unsqueeze(-1) * d2  # (N, 3)
+    diff = closest_l - closest_r
+    dist = torch.sqrt((diff * diff).sum(-1) + eps)  # (N,)
+
+    return torch.clamp(threshold - dist, min=0.0), dist  # penalty, 실제 거리
+
+@torch.jit.script
+def _impact_vel_reward(
+        hit_per_arm: torch.Tensor,  # (N, 2, M)
+        tip_vel: torch.Tensor,      # (N, 2, 3)
+        max_vel: float,
+) -> torch.Tensor:                  # (N,)
+    down_vel = torch.clamp(-tip_vel[:, :, 2], 0.0, max_vel)      # (N, 2)
+
+    # (arm, drum)별 타격 속도: hit이 난 (팔, 드럼)에만 그 팔의 하강 속도
+    vel_per_arm_drum = hit_per_arm.float() * down_vel[:, :, None]  # (N, 2, M)
+
+    # 드럼별로 두 팔 중 최대값만 취해 양팔 이중 보상 제거
+    vel_per_drum = vel_per_arm_drum.max(dim=1).values             # (N, M)
+
+    return (vel_per_drum / (max_vel + 1e-8)).sum(dim=1)           # (N,)
+
+@torch.jit.script
 def _tip_position_penalties(
         left_tip_pos: torch.Tensor,
         right_tip_pos: torch.Tensor,
@@ -294,6 +349,10 @@ def compute_rewards(
         w_limit: float,
         w_tip_limit: float,
         w_under_drum: float,
+        w_self_collision: float,
+        self_col_pen: torch.Tensor,
+        impact_vel_reward: torch.Tensor,
+        w_impact_vel: float,
 ) -> torch.Tensor:
     reward = (
         w_success * success_reward
@@ -307,11 +366,14 @@ def compute_rewards(
         + w_upward * upward_reward
         + w_downward * downward_reward
 
+        + w_impact_vel * impact_vel_reward
+
         - w_action * action_l2
         - w_joint_vel * joint_vel_l2
         - w_limit * limit_pen
         - w_tip_limit * tip_limit_pen
         - w_under_drum * under_drum_pen
+        - w_self_collision * self_col_pen
     )
     return reward
 
@@ -333,21 +395,26 @@ class RewardComputerCfg:
 
     # 가중치
     w_success: float = 5.0
-    w_wrong: float = 1.5
+    w_wrong: float = 3.0 #1.5
     w_miss: float = 2.0
     w_time_accuracy: float = 5.0
 
     w_progress: float = 4.0
     w_proximity: float = 1.5
 
-    w_upward: float = 0.5 #0.35
-    w_downward: float = 0.4 #0.30
+    w_upward: float = 0.4
+    w_downward: float = 0.5
 
-    w_action: float = 0.00005 #0.0005
-    w_joint_vel: float = 0.00003 #0.0003
+    w_impact_vel: float = 3.0
+    impact_vel_max: float = 1.0
+
+    w_action: float = 0.0005
+    w_joint_vel: float = 0.0003
     w_limit: float = 0.5
     w_tip_limit: float = 0.15
     w_under_drum: float = 0.08
+    w_self_collision: float = 0.5
+    self_collision_threshold: float = 0.10  # 스틱 간 거리 임계값 [m]
 
     # 악기별 가중치 업데이트 주기 (step)
     update_interval: int = 100
@@ -389,6 +456,9 @@ class RewardComputer:
             robot_pos: torch.Tensor,
             joint_low: torch.Tensor,
             joint_high: torch.Tensor,
+            wrist_pos: torch.Tensor,    # (N, 2, 3)
+            elbow_pos: torch.Tensor,    # (N, 2, 3)
+            hit_per_arm: torch.Tensor,  # (N, 2, M)
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # goal
         success_reward, wrong_cost, missed_cost, time_accuracy_reward = _goal_terms(
@@ -436,6 +506,22 @@ class RewardComputer:
             limit_margin=self.cfg.limit_margin,
         )
 
+        # self collision penalty (전완 선분: elbow → wrist)
+        self_col_pen, forearm_dist = _self_collision_penalty(
+            elbow_l=elbow_pos[:, 0, :],
+            wrist_l=wrist_pos[:, 0, :],
+            elbow_r=elbow_pos[:, 1, :],
+            wrist_r=wrist_pos[:, 1, :],
+            threshold=self.cfg.self_collision_threshold,
+        )
+
+        # impact velocity (히트 순간 속도 비례 보상)
+        impact_vel_reward = _impact_vel_reward(
+            hit_per_arm=hit_per_arm,
+            tip_vel=tip_vel,
+            max_vel=self.cfg.impact_vel_max,
+        )
+
         reward = compute_rewards(
             success_reward=success_reward,
             wrong_cost=wrong_cost,
@@ -470,6 +556,10 @@ class RewardComputer:
             w_limit=self.cfg.w_limit,
             w_tip_limit=self.cfg.w_tip_limit,
             w_under_drum=self.cfg.w_under_drum,
+            w_self_collision=self.cfg.w_self_collision,
+            self_col_pen=self_col_pen,
+            impact_vel_reward=impact_vel_reward,
+            w_impact_vel=self.cfg.w_impact_vel,
         )
 
         num_hit_drum = success.float() + missed_target.float()
@@ -490,12 +580,22 @@ class RewardComputer:
             "limit_pen(x100)": limit_pen * 100,
             "tip_limit_pen": tip_limit_pen,
             "under_drum_pen": under_drum_pen,
+            "self_collision_pen": self_col_pen,
+            "forearm_dist": forearm_dist,
+            "impact_vel": impact_vel_reward,
         }
+
+        # 실제 타격 순간 평균 속도 (m/s)
+        hit_any_per_arm = hit_per_arm.any(dim=2)                           # (N, 2)
+        down_vel_ms = torch.clamp(-tip_vel[:, :, 2], 0.0)                 # (N, 2)
+        vel_sum = (hit_any_per_arm.float() * down_vel_ms).sum(dim=1)      # (N,)
+        hit_arm_count = hit_any_per_arm.float().sum(dim=1)                 # (N,)
 
         rate_log_terms = {
             "success_rate": torch.stack([num_success, num_hit], dim=-1),
             "wrong_rate": torch.stack([num_wrong, num_hit], dim=-1),
             "miss_rate": torch.stack([num_missed, num_hit], dim=-1),
+            "avg_impact_vel_ms": torch.stack([vel_sum, hit_arm_count], dim=-1),
         }
 
         for i, name in enumerate(self.drum_names):

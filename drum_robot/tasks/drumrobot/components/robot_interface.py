@@ -125,6 +125,30 @@ class RobotInterface:
 
         return tip_pos
     
+    def get_wrist_pos(self, robot: Articulation) -> torch.Tensor:
+        # 왼쪽/오른쪽 wrist 링크의 env 기준 위치 반환
+        all_body_pos = robot.data.body_pos_w  # (N, num_bodies, 3)
+
+        l_idx = self.body_to_idx["left_wrist"]
+        r_idx = self.body_to_idx["right_wrist"]
+
+        L_wrist = all_body_pos[:, l_idx] - self.env_origins  # (N, 3)
+        R_wrist = all_body_pos[:, r_idx] - self.env_origins  # (N, 3)
+
+        return torch.stack([L_wrist, R_wrist], dim=1)  # (N, 2, 3)
+
+    def get_elbow_pos(self, robot: Articulation) -> torch.Tensor:
+        # 왼쪽/오른쪽 elbow 링크의 env 기준 위치 반환
+        all_body_pos = robot.data.body_pos_w  # (N, num_bodies, 3)
+
+        l_idx = self.body_to_idx["left_elbow"]
+        r_idx = self.body_to_idx["right_elbow"]
+
+        L_elbow = all_body_pos[:, l_idx] - self.env_origins  # (N, 3)
+        R_elbow = all_body_pos[:, r_idx] - self.env_origins  # (N, 3)
+
+        return torch.stack([L_elbow, R_elbow], dim=1)  # (N, 2, 3)
+
     def get_limit(self) -> tuple[torch.Tensor, torch.Tensor]:
         return self.joint_low, self.joint_high
     

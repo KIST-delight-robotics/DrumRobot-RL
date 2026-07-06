@@ -230,6 +230,9 @@ class DrumRobotEnv(DirectRLEnv):
 
         joint_low, joint_high = self.robot_interface.get_limit()
 
+        wrist_pos = self.robot_interface.get_wrist_pos(self.robot)  # (N, 2, 3)
+        elbow_pos = self.robot_interface.get_elbow_pos(self.robot)  # (N, 2, 3)
+
         reward, log_terms, rate_log_terms = self.reward_computer.compute(
             success=success,
             wrong_hit=wrong_hit,
@@ -246,6 +249,9 @@ class DrumRobotEnv(DirectRLEnv):
             robot_pos=robot_pos,
             joint_low=joint_low,
             joint_high=joint_high,
+            wrist_pos=wrist_pos,
+            elbow_pos=elbow_pos,
+            hit_per_arm=hit_per_arm,
         )
 
         # 가중치 업데이트

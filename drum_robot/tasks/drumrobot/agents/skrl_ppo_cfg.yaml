@@ -15,7 +15,7 @@ models:
     network:
       - name: net
         input: OBSERVATIONS
-        layers: [256, 160, 128] #[512, 256, 128]
+        layers: [256, 160, 128] #512, 256, 128]
         activations: elu
     output: ONE # value_dim=1
 
@@ -25,9 +25,9 @@ memory:
 
 agent:
   class: PPO
-  rollouts: 64
+  rollouts: 64 #400
   learning_epochs: 4
-  mini_batches: 4
+  mini_batches: 4 #8
   discount_factor: 0.99
   lambda: 0.95
   learning_rate: 1.0e-04
@@ -58,5 +58,5 @@ agent:
 
 trainer:
   class: SequentialTrainer
-  timesteps: 3000000 #1000000
+  timesteps: 1000000
   environment_info: log
