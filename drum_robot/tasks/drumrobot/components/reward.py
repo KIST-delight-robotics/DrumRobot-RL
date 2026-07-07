@@ -38,6 +38,7 @@ def compute_arm_target_assignment(
         right_tip_pos: torch.Tensor,# (N, 3)
         tip_vel: torch.Tensor,      # (N, 2, 3)
         hit_armed: torch.Tensor,    # (N, 2, M)
+        k_align: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     device = target_mask.device
     N, M = target_mask.shape
@@ -71,6 +72,22 @@ def compute_arm_target_assignment(
 
     d_l1 = dist_l.gather(1, idx1).squeeze(1)
     d_r1 = dist_r.gather(1, idx1).squeeze(1)
+
+    # --------------------
+
+    # XY 제곱거리 → 정렬 게이트 (타겟 위=1, 멀수록 0). downward 보상에만 사용
+    diff_xy_l = diff_l[:, :, 0:2]
+    diff_xy_r = diff_r[:, :, 0:2]
+    dist_xy_l = torch.sum(diff_xy_l * diff_xy_l, dim=-1)   # (N, M)
+    dist_xy_r = torch.sum(diff_xy_r * diff_xy_r, dim=-1)
+
+    align_l = torch.exp(-k_align * dist_xy_l)   # (N, M)
+    align_r = torch.exp(-k_align * dist_xy_r)
+
+    a_l0 = align_l.gather(1, idx0).squeeze(1)   # (N,)
+    a_r0 = align_r.gather(1, idx0).squeeze(1)
+    a_l1 = align_l.gather(1, idx1).squeeze(1)
+    a_r1 = align_r.gather(1, idx1).squeeze(1)
 
     # --------------------
 
@@ -114,8 +131,11 @@ def compute_arm_target_assignment(
 
     one_downward_reward = torch.where(
         use_left,
-        h_l0.float() * down_vel_l,
-        h_r0.float() * down_vel_r,
+        #h_l0.float() * down_vel_l,
+        #h_r0.float() * down_vel_r,
+
+        h_l0.float() * down_vel_l * a_l0,
+        h_r0.float() * down_vel_r * a_r0,
     )
 
     upward_reward = torch.where(one_mask, one_upward_reward, upward_reward)
@@ -143,8 +163,8 @@ def compute_arm_target_assignment(
 
     two_downward_reward = torch.where(
         use_case1,
-        h_l0.float() * down_vel_l + h_r1.float() * down_vel_r,
-        h_l1.float() * down_vel_l + h_r0.float() * down_vel_r,
+        h_l0.float() * down_vel_l * a_l0 + h_r1.float() * down_vel_r * a_r1,
+        h_l1.float() * down_vel_l * a_l1 + h_r0.float() * down_vel_r * a_r0,
     ) / 2
     
     upward_reward = torch.where(two_mask, two_upward_reward, upward_reward)
@@ -170,6 +190,7 @@ def _proximity_terms(
         tip_vel: torch.Tensor,
         hit_armed: torch.Tensor,
         k_time_to_hit: float,
+        k_align: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     M = drum_pos.shape[1]
 
@@ -183,6 +204,7 @@ def _proximity_terms(
         right_tip_pos=right_tip_pos,
         tip_vel=tip_vel,
         hit_armed=hit_armed,
+        k_align=k_align,
     )
     prev_cost, _, _ = compute_arm_target_assignment(
         target_mask=nearest_target_mask,
@@ -191,6 +213,7 @@ def _proximity_terms(
         right_tip_pos=prev_right_tip_pos,
         tip_vel=tip_vel,
         hit_armed=hit_armed,
+        k_align=k_align,
     )
 
     proximity_cost = torch.exp(-k_time_to_hit * first_time) * curr_cost
@@ -384,6 +407,7 @@ class RewardComputerCfg:
     limit_margin: float = 0.08
     k_accuracy: float = 1.0
     k_time_to_hit: float = 3.0
+    k_align: float = 40.0   # downward 보상 XY 정렬 게이트 (XY 제곱거리 기준, 13cm≈0.51)
 
     # 팁이 가면 안되는 범위
     x_limit: float = 0.5
@@ -481,6 +505,7 @@ class RewardComputer:
             tip_vel=tip_vel,
             hit_armed=prev_hit_armed,
             k_time_to_hit=self.cfg.k_time_to_hit,
+            k_align=self.cfg.k_align,
         )
 
         # tip position penalties
